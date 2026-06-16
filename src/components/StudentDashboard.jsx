@@ -532,7 +532,6 @@ export default function StudentDashboard({ user, onLogout }) {
               </p>
               <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
                 <button onClick={() => setSearchQuery("")} className="btn btn-secondary">Clear</button>
-                <a href="#helpdesk" className="btn btn-accent" style={{ fontSize: "0.85rem" }}>Go to Helpdesk</a>
               </div>
             </motion.div>
           )}
