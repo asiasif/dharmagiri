@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, MapPin, Calendar, Clock, LogOut, BookOpen, AlertTriangle, User, Compass, HelpCircle, Megaphone, X, Pin, Star } from "lucide-react";
+import { Search, MapPin, Calendar, Clock, LogOut, BookOpen, AlertTriangle, User, Compass, HelpCircle, Megaphone, X, Pin, Star, Phone, MessageCircle } from "lucide-react";
 import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { db, isValidConfig } from "../firebase";
 import DharmagiriLogo from "./DharmagiriLogo";
@@ -52,12 +52,15 @@ const CAMPUS_LAYOUT = [
   { floor: "Ground Floor", rooms: ["Room 001", "Room 002", "Room 003", "Room 004", "Room 005"] },
 ];
 
+const HELPDESK_PHONE = "+919048083264";
+
 export default function StudentDashboard({ user, onLogout }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [studentData, setStudentData] = useState(null);
   const [isDemoMode, setIsDemoMode] = useState(!isValidConfig);
+  const [showHelpDesk, setShowHelpDesk] = useState(false);
 
   // Announcements
   const [announcements, setAnnouncements] = useState([]);
@@ -543,6 +546,185 @@ export default function StudentDashboard({ user, onLogout }) {
           For IGNOU Center assistance, contact the controller of exams office inside Block A.
         </p>
       </footer>
+
+      {/* Floating Help Desk Button */}
+      <motion.button
+        id="helpdesk"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ delay: 0.8, type: "spring", stiffness: 200 }}
+        whileHover={{ scale: 1.08 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setShowHelpDesk(true)}
+        style={{
+          position: "fixed",
+          bottom: "2rem",
+          left: "2rem",
+          zIndex: 100,
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          padding: "0.75rem 1.25rem",
+          borderRadius: "30px",
+          border: "1px solid rgba(99,102,241,0.4)",
+          background: "linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(20,184,166,0.2) 100%)",
+          backdropFilter: "blur(12px)",
+          color: "var(--text-primary)",
+          fontSize: "0.85rem",
+          fontWeight: 600,
+          cursor: "pointer",
+          boxShadow: "0 8px 24px rgba(99,102,241,0.25), 0 0 0 1px rgba(99,102,241,0.1)",
+        }}
+      >
+        <motion.span
+          animate={{ rotate: [0, 15, -15, 0] }}
+          transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 3 }}
+        >
+          <HelpCircle size={18} style={{ color: "#a5b4fc" }} />
+        </motion.span>
+        Help Desk
+      </motion.button>
+
+      {/* Help Desk Contact Modal */}
+      <AnimatePresence>
+        {showHelpDesk && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowHelpDesk(false)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 200,
+              background: "rgba(0,0,0,0.6)",
+              backdropFilter: "blur(6px)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: "1.5rem",
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0, y: 30 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.85, opacity: 0, y: 30 }}
+              transition={{ type: "spring", stiffness: 200, damping: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%", maxWidth: "360px",
+                background: "linear-gradient(145deg, rgba(15,15,25,0.98) 0%, rgba(20,20,35,0.98) 100%)",
+                border: "1px solid rgba(99,102,241,0.25)",
+                borderRadius: "var(--radius-lg)",
+                padding: "2rem",
+                boxShadow: "0 25px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,102,241,0.1)",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              {/* Glow decoration */}
+              <div style={{
+                position: "absolute", top: "-40px", right: "-40px",
+                width: "120px", height: "120px",
+                borderRadius: "50%",
+                background: "radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%)",
+                pointerEvents: "none",
+              }} />
+
+              {/* Close button */}
+              <button
+                onClick={() => setShowHelpDesk(false)}
+                style={{
+                  position: "absolute", top: "1rem", right: "1rem",
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: "50%", width: "30px", height: "30px",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", color: "var(--text-secondary)",
+                }}
+              >
+                <X size={15} />
+              </button>
+
+              {/* Header */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem", marginBottom: "1.75rem", textAlign: "center" }}>
+                <div style={{
+                  width: "52px", height: "52px", borderRadius: "50%",
+                  background: "linear-gradient(135deg, rgba(99,102,241,0.25) 0%, rgba(20,184,166,0.25) 100%)",
+                  border: "1px solid rgba(99,102,241,0.3)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <HelpCircle size={24} style={{ color: "#a5b4fc" }} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: "1.15rem", fontWeight: 800, marginBottom: "0.25rem" }}>IGNOU Help Desk</h3>
+                  <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Dharmagiri College · IGNOU Center</p>
+                </div>
+              </div>
+
+              {/* Phone number display */}
+              <div style={{
+                textAlign: "center",
+                padding: "0.85rem 1rem",
+                background: "rgba(99,102,241,0.07)",
+                border: "1px solid rgba(99,102,241,0.15)",
+                borderRadius: "var(--radius-md)",
+                marginBottom: "1.5rem",
+              }}>
+                <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.35rem" }}>Contact Number</p>
+                <p style={{ fontSize: "1.3rem", fontWeight: 800, letterSpacing: "0.03em", color: "var(--text-primary)" }}>{HELPDESK_PHONE}</p>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                {/* Call Button */}
+                <motion.a
+                  href={`tel:${HELPDESK_PHONE}`}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: "0.65rem",
+                    padding: "0.9rem 1.5rem",
+                    borderRadius: "var(--radius-md)",
+                    background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
+                    color: "white",
+                    fontWeight: 700, fontSize: "0.95rem",
+                    textDecoration: "none",
+                    boxShadow: "0 6px 20px rgba(99,102,241,0.35)",
+                    border: "none",
+                  }}
+                >
+                  <Phone size={18} />
+                  Call Now
+                </motion.a>
+
+                {/* WhatsApp Button */}
+                <motion.a
+                  href={`https://wa.me/${HELPDESK_PHONE.replace("+", "")}?text=Hello%2C%20I%20need%20help%20with%20IGNOU%20exam%20seating%20at%20Dharmagiri%20College.`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: "0.65rem",
+                    padding: "0.9rem 1.5rem",
+                    borderRadius: "var(--radius-md)",
+                    background: "linear-gradient(135deg, #16a34a 0%, #22c55e 100%)",
+                    color: "white",
+                    fontWeight: 700, fontSize: "0.95rem",
+                    textDecoration: "none",
+                    boxShadow: "0 6px 20px rgba(34,197,94,0.3)",
+                    border: "none",
+                  }}
+                >
+                  <MessageCircle size={18} />
+                  WhatsApp Message
+                </motion.a>
+              </div>
+
+              <p style={{ textAlign: "center", fontSize: "0.73rem", color: "var(--text-muted)", marginTop: "1.25rem" }}>
+                Available during college hours · Mon–Sat
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
