@@ -57,9 +57,9 @@ const parsePDFTableGrid = async (arrayBuffer) => {
     
     if (items.length === 0) continue;
     
-    // 1. Cluster items into columns by X coordinate with tolerance
-    const columnsList = [];
-    const xTolerance = 50;
+    // Group items into rows by Y coordinate with tolerance
+    const yTolerance = 6;
+    const tempRows = [];
     
     items.forEach((item) => {
       const text = item.str.trim();
@@ -68,90 +68,98 @@ const parsePDFTableGrid = async (arrayBuffer) => {
       const x = item.transform[4];
       const y = item.transform[5];
       
-      let matchedCol = columnsList.find(c => Math.abs(c.x - x) < xTolerance);
-      if (matchedCol) {
-        matchedCol.items.push({ text, x, y });
+      let matchedRow = tempRows.find(r => Math.abs(r.y - y) < yTolerance);
+      if (matchedRow) {
+        matchedRow.items.push({ text, x, y });
       } else {
-        columnsList.push({
-          x,
-          items: [{ text, x, y }]
-        });
+        tempRows.push({ y, items: [{ text, x, y }] });
       }
     });
     
-    // Sort columns from left to right (X coordinate ascending)
-    columnsList.sort((a, b) => a.x - b.x);
+    // Sort rows from top to bottom (Y descending)
+    tempRows.sort((a, b) => b.y - a.y);
     
-    const columns = [];
-    let lastBlockFloor = "NEW BLOCK Ground Floor";
+    // Sort items within each row from left to right (X ascending)
+    tempRows.forEach(r => r.items.sort((a, b) => a.x - b.x));
     
-    columnsList.forEach((col) => {
-      // Sort items in this column from top to bottom (Y descending)
-      col.items.sort((a, b) => b.y - a.y);
-      
-      const blockKeywords = ["block", "floor", "ground", "first", "second", "third", "fourth", "fifth", "5th", "1st", "2nd", "3rd", "4th"];
-      let blockHeaderIdx = -1;
-      
-      for (let i = 0; i < col.items.length; i++) {
-        const textLower = col.items[i].text.toLowerCase();
-        if (blockKeywords.some(kw => textLower.includes(kw))) {
-          blockHeaderIdx = i;
-          break;
-        }
+    // Find the Block/Floor row (containing keywords like block, floor, ground)
+    let blockRowIdx = -1;
+    for (let i = 0; i < tempRows.length; i++) {
+      const rowText = tempRows[i].items.map(it => it.text.toLowerCase()).join(" ");
+      if (rowText.includes("block") || rowText.includes("floor") || rowText.includes("ground") || rowText.includes("first") || rowText.includes("5th")) {
+        blockRowIdx = i;
+        break;
       }
-      
-      let blockFloorText = "";
-      let roomText = "";
-      let roomHeaderIdx = -1;
-      
-      if (blockHeaderIdx !== -1) {
-        blockFloorText = col.items[blockHeaderIdx].text;
-        lastBlockFloor = blockFloorText;
+    }
+    
+    if (blockRowIdx === -1) blockRowIdx = 0;
+    
+    // The Room/Class row is directly below the Block/Floor row
+    let roomRowIdx = blockRowIdx + 1;
+    if (roomRowIdx >= tempRows.length) {
+      roomRowIdx = blockRowIdx;
+    }
+    
+    const blockRowItems = tempRows[blockRowIdx]?.items || [];
+    const roomRowItems = tempRows[roomRowIdx]?.items || [];
+    
+    if (roomRowItems.length === 0) continue;
+    
+    // Map roomRowItems as column anchors (ignore very short headers like serial number column dots)
+    const columns = roomRowItems
+      .filter(item => item.text.trim().length > 1)
+      .map((item) => {
+        let closestBlockFloor = "NEW BLOCK Ground Floor";
+        let minDistance = Infinity;
         
-        if (blockHeaderIdx + 1 < col.items.length) {
-          roomHeaderIdx = blockHeaderIdx + 1;
-          roomText = col.items[roomHeaderIdx].text;
-        }
-      } else {
-        blockFloorText = lastBlockFloor;
-        // Search for the room header (first text item that is not a long register number)
-        for (let i = 0; i < col.items.length; i++) {
-          const text = col.items[i].text.replace(/\.0$/, "").trim();
-          if (text.length < 6 && text.length > 0) {
-            roomText = text;
-            roomHeaderIdx = i;
-            break;
+        blockRowItems.forEach((blockItem) => {
+          const dist = Math.abs(blockItem.x - item.x);
+          if (dist < minDistance) {
+            minDistance = dist;
+            closestBlockFloor = blockItem.text;
           }
-        }
-      }
-      
-      if (roomText) {
-        // Fallback checks
-        if (roomText.replace(/\.0$/, "").trim().length >= 6) {
-          roomText = "G1";
-          roomHeaderIdx = blockHeaderIdx !== -1 ? blockHeaderIdx : -1;
-        }
-        
-        const studentRegs = [];
-        const startIdx = roomHeaderIdx + 1;
-        for (let i = startIdx; i < col.items.length; i++) {
-          const regStr = col.items[i].text.replace(/\.0$/, "").trim();
-          if (regStr.length >= 6 && /\d/.test(regStr)) {
-            studentRegs.push(regStr);
-          }
-        }
-        
-        columns.push({
-          blockFloor: blockFloorText,
-          room: roomText,
-          students: studentRegs
         });
-      }
-    });
-    
+        
+        return {
+          room: item.text.trim(),
+          x: item.x,
+          y: item.y,
+          blockFloor: closestBlockFloor,
+          students: []
+        };
+      });
+      
     if (columns.length === 0) continue;
     
-    // Build the 2D grid structure
+    // Distribute remaining items into columns based on closest X coordinate
+    const roomY = tempRows[roomRowIdx].y;
+    for (let r = 0; r < tempRows.length; r++) {
+      if (r === blockRowIdx || r === roomRowIdx) continue;
+      if (tempRows[r].y > roomY + 3) continue; // Skip header elements
+      
+      const rowItems = tempRows[r].items;
+      rowItems.forEach((item) => {
+        const text = item.text.replace(/\.0$/, "").trim();
+        if (text.length < 6) return; // Ignore serial numbers and short entries
+        
+        let closestCol = null;
+        let minDistance = Infinity;
+        
+        columns.forEach((col) => {
+          const dist = Math.abs(col.x - item.x);
+          if (dist < minDistance) {
+            minDistance = dist;
+            closestCol = col;
+          }
+        });
+        
+        if (closestCol && minDistance < 70) {
+          closestCol.students.push(text);
+        }
+      });
+    }
+    
+    // Reconstruct 2D grid structure
     const pageGrid = [];
     const blockFloors = columns.map(c => c.blockFloor);
     const rooms = columns.map(c => c.room);
