@@ -57,8 +57,9 @@ const parsePDFTableGrid = async (arrayBuffer) => {
     
     if (items.length === 0) continue;
     
-    const yTolerance = 6;
-    const tempRows = [];
+    // 1. Cluster items into columns by X coordinate with tolerance
+    const columnsList = [];
+    const xTolerance = 50;
     
     items.forEach((item) => {
       const text = item.str.trim();
@@ -67,83 +68,90 @@ const parsePDFTableGrid = async (arrayBuffer) => {
       const x = item.transform[4];
       const y = item.transform[5];
       
-      let matchedRow = tempRows.find(r => Math.abs(r.y - y) < yTolerance);
-      if (matchedRow) {
-        matchedRow.items.push({ text, x });
+      let matchedCol = columnsList.find(c => Math.abs(c.x - x) < xTolerance);
+      if (matchedCol) {
+        matchedCol.items.push({ text, x, y });
       } else {
-        tempRows.push({ y, items: [{ text, x }] });
-      }
-    });
-    
-    tempRows.sort((a, b) => b.y - a.y);
-    tempRows.forEach(r => r.items.sort((a, b) => a.x - b.x));
-    
-    let header0Idx = -1;
-    let header1Idx = -1;
-    
-    for (let i = 0; i < tempRows.length; i++) {
-      const rowText = tempRows[i].items.map(it => it.text.toLowerCase()).join(" ");
-      if (rowText.includes("block") || rowText.includes("floor") || rowText.includes("ground") || rowText.includes("first")) {
-        header0Idx = i;
-        break;
-      }
-    }
-    
-    if (header0Idx !== -1 && header0Idx + 1 < tempRows.length) {
-      header1Idx = header0Idx + 1;
-    } else {
-      header0Idx = 0;
-      header1Idx = 1;
-    }
-    
-    if (header0Idx === -1 || header1Idx === -1 || tempRows.length <= header1Idx) continue;
-    
-    const row0 = tempRows[header0Idx].items;
-    const row1 = tempRows[header1Idx].items;
-    
-    const columns = row1.map((roomItem) => {
-      let closestBlockFloor = "";
-      let minDistance = Infinity;
-      
-      row0.forEach((blockItem) => {
-        const dist = Math.abs(blockItem.x - roomItem.x);
-        if (dist < minDistance) {
-          minDistance = dist;
-          closestBlockFloor = blockItem.text;
-        }
-      });
-      
-      return {
-        room: roomItem.text,
-        x: roomItem.x,
-        blockFloor: closestBlockFloor || "NEW BLOCK Ground Floor",
-        students: []
-      };
-    });
-    
-    for (let r = header1Idx + 1; r < tempRows.length; r++) {
-      const rowItems = tempRows[r].items;
-      rowItems.forEach((item) => {
-        const text = item.text.replace(/\.0$/, "").trim();
-        if (text.length < 6) return;
-        
-        let closestCol = null;
-        let minDistance = Infinity;
-        
-        columns.forEach((col) => {
-          const dist = Math.abs(col.x - item.x);
-          if (dist < minDistance) {
-            minDistance = dist;
-            closestCol = col;
-          }
+        columnsList.push({
+          x,
+          items: [{ text, x, y }]
         });
-        
-        if (closestCol && minDistance < 80) {
-          closestCol.students.push(text);
-        }
-      });
-    }
+      }
+    });
     
+    // Sort columns from left to right (X coordinate ascending)
+    columnsList.sort((a, b) => a.x - b.x);
+    
+    const columns = [];
+    let lastBlockFloor = "NEW BLOCK Ground Floor";
+    
+    columnsList.forEach((col) => {
+      // Sort items in this column from top to bottom (Y descending)
+      col.items.sort((a, b) => b.y - a.y);
+      
+      const blockKeywords = ["block", "floor", "ground", "first", "second", "third", "fourth", "fifth", "5th", "1st", "2nd", "3rd", "4th"];
+      let blockHeaderIdx = -1;
+      
+      for (let i = 0; i < col.items.length; i++) {
+        const textLower = col.items[i].text.toLowerCase();
+        if (blockKeywords.some(kw => textLower.includes(kw))) {
+          blockHeaderIdx = i;
+          break;
+        }
+      }
+      
+      let blockFloorText = "";
+      let roomText = "";
+      let roomHeaderIdx = -1;
+      
+      if (blockHeaderIdx !== -1) {
+        blockFloorText = col.items[blockHeaderIdx].text;
+        lastBlockFloor = blockFloorText;
+        
+        if (blockHeaderIdx + 1 < col.items.length) {
+          roomHeaderIdx = blockHeaderIdx + 1;
+          roomText = col.items[roomHeaderIdx].text;
+        }
+      } else {
+        blockFloorText = lastBlockFloor;
+        // Search for the room header (first text item that is not a long register number)
+        for (let i = 0; i < col.items.length; i++) {
+          const text = col.items[i].text.replace(/\.0$/, "").trim();
+          if (text.length < 6 && text.length > 0) {
+            roomText = text;
+            roomHeaderIdx = i;
+            break;
+          }
+        }
+      }
+      
+      if (roomText) {
+        // Fallback checks
+        if (roomText.replace(/\.0$/, "").trim().length >= 6) {
+          roomText = "G1";
+          roomHeaderIdx = blockHeaderIdx !== -1 ? blockHeaderIdx : -1;
+        }
+        
+        const studentRegs = [];
+        const startIdx = roomHeaderIdx + 1;
+        for (let i = startIdx; i < col.items.length; i++) {
+          const regStr = col.items[i].text.replace(/\.0$/, "").trim();
+          if (regStr.length >= 6 && /\d/.test(regStr)) {
+            studentRegs.push(regStr);
+          }
+        }
+        
+        columns.push({
+          blockFloor: blockFloorText,
+          room: roomText,
+          students: studentRegs
+        });
+      }
+    });
+    
+    if (columns.length === 0) continue;
+    
+    // Build the 2D grid structure
     const pageGrid = [];
     const blockFloors = columns.map(c => c.blockFloor);
     const rooms = columns.map(c => c.room);
