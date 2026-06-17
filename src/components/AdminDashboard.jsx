@@ -82,13 +82,12 @@ const parsePDFTableGrid = async (arrayBuffer) => {
     // Sort items within each row from left to right (X ascending)
     tempRows.forEach(r => r.items.sort((a, b) => a.x - b.x));
     
-    // Find the Block/Floor row (containing keywords like block, floor, ground)
+    // Find the Block/Floor row (we scan to find the last row containing keywords)
     let blockRowIdx = -1;
     for (let i = 0; i < tempRows.length; i++) {
       const rowText = tempRows[i].items.map(it => it.text.toLowerCase()).join(" ");
       if (rowText.includes("block") || rowText.includes("floor") || rowText.includes("ground") || rowText.includes("first") || rowText.includes("5th")) {
-        blockRowIdx = i;
-        break;
+        blockRowIdx = i; // get the last row containing keywords
       }
     }
     
@@ -100,7 +99,6 @@ const parsePDFTableGrid = async (arrayBuffer) => {
       roomRowIdx = blockRowIdx;
     }
     
-    const blockRowItems = tempRows[blockRowIdx]?.items || [];
     const roomRowItems = tempRows[roomRowIdx]?.items || [];
     
     if (roomRowItems.length === 0) continue;
@@ -109,22 +107,23 @@ const parsePDFTableGrid = async (arrayBuffer) => {
     const columns = roomRowItems
       .filter(item => item.text.trim().length > 1)
       .map((item) => {
-        let closestBlockFloor = "NEW BLOCK Ground Floor";
-        let minDistance = Infinity;
-        
-        blockRowItems.forEach((blockItem) => {
-          const dist = Math.abs(blockItem.x - item.x);
-          if (dist < minDistance) {
-            minDistance = dist;
-            closestBlockFloor = blockItem.text;
+        // Collect all header labels in this column from top to roomRowIdx - 1
+        const colHeaderItems = [];
+        for (let r = 0; r < roomRowIdx; r++) {
+          const rowItems = tempRows[r]?.items || [];
+          const closest = rowItems.find(blockItem => Math.abs(blockItem.x - item.x) < 40);
+          if (closest) {
+            colHeaderItems.push(closest.text);
           }
-        });
+        }
+        
+        const fullBlockFloor = colHeaderItems.join(" ").trim() || "NEW BLOCK Ground Floor";
         
         return {
           room: item.text.trim(),
           x: item.x,
           y: item.y,
-          blockFloor: closestBlockFloor,
+          blockFloor: fullBlockFloor,
           students: []
         };
       });
@@ -132,10 +131,10 @@ const parsePDFTableGrid = async (arrayBuffer) => {
     if (columns.length === 0) continue;
     
     // Distribute remaining items into columns based on closest X coordinate
-    const roomY = tempRows[roomRowIdx].y;
     for (let r = 0; r < tempRows.length; r++) {
       if (r === blockRowIdx || r === roomRowIdx) continue;
-      if (tempRows[r].y > roomY + 3) continue; // Skip header elements
+      // Skip the vertical header rows we already processed
+      if (r < roomRowIdx) continue;
       
       const rowItems = tempRows[r].items;
       rowItems.forEach((item) => {
