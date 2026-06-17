@@ -408,7 +408,7 @@ export default function StudentDashboard({ user, onLogout }) {
                       <div>
                         <span style={infoLabelStyle}>Floor / Room</span>
                         <span style={{ ...infoValStyle, fontSize: "1.1rem", fontWeight: 700 }}>
-                          {studentData.floor} - {studentData.roomNumber}
+                          {studentData.floor} - {studentData.roomNumber || "Not Allocated"}
                         </span>
                       </div>
                     </div>
