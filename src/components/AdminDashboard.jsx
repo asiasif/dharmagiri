@@ -43,6 +43,126 @@ const parseBlockAndFloor = (str) => {
   return { block: str, floor: "Ground Floor" };
 };
 
+const parsePDFTableGrid = async (arrayBuffer) => {
+  const pdfjsLib = window.pdfjsLib;
+  if (!pdfjsLib) throw new Error("PDF parser library (pdfjs-dist) is not loaded.");
+  
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let gridRows = [];
+  
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    const items = textContent.items;
+    
+    if (items.length === 0) continue;
+    
+    const yTolerance = 6;
+    const tempRows = [];
+    
+    items.forEach((item) => {
+      const text = item.str.trim();
+      if (!text) return;
+      
+      const x = item.transform[4];
+      const y = item.transform[5];
+      
+      let matchedRow = tempRows.find(r => Math.abs(r.y - y) < yTolerance);
+      if (matchedRow) {
+        matchedRow.items.push({ text, x });
+      } else {
+        tempRows.push({ y, items: [{ text, x }] });
+      }
+    });
+    
+    tempRows.sort((a, b) => b.y - a.y);
+    tempRows.forEach(r => r.items.sort((a, b) => a.x - b.x));
+    
+    let header0Idx = -1;
+    let header1Idx = -1;
+    
+    for (let i = 0; i < tempRows.length; i++) {
+      const rowText = tempRows[i].items.map(it => it.text.toLowerCase()).join(" ");
+      if (rowText.includes("block") || rowText.includes("floor") || rowText.includes("ground") || rowText.includes("first")) {
+        header0Idx = i;
+        break;
+      }
+    }
+    
+    if (header0Idx !== -1 && header0Idx + 1 < tempRows.length) {
+      header1Idx = header0Idx + 1;
+    } else {
+      header0Idx = 0;
+      header1Idx = 1;
+    }
+    
+    if (header0Idx === -1 || header1Idx === -1 || tempRows.length <= header1Idx) continue;
+    
+    const row0 = tempRows[header0Idx].items;
+    const row1 = tempRows[header1Idx].items;
+    
+    const columns = row1.map((roomItem) => {
+      let closestBlockFloor = "";
+      let minDistance = Infinity;
+      
+      row0.forEach((blockItem) => {
+        const dist = Math.abs(blockItem.x - roomItem.x);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestBlockFloor = blockItem.text;
+        }
+      });
+      
+      return {
+        room: roomItem.text,
+        x: roomItem.x,
+        blockFloor: closestBlockFloor || "NEW BLOCK Ground Floor",
+        students: []
+      };
+    });
+    
+    for (let r = header1Idx + 1; r < tempRows.length; r++) {
+      const rowItems = tempRows[r].items;
+      rowItems.forEach((item) => {
+        const text = item.text.replace(/\.0$/, "").trim();
+        if (text.length < 6) return;
+        
+        let closestCol = null;
+        let minDistance = Infinity;
+        
+        columns.forEach((col) => {
+          const dist = Math.abs(col.x - item.x);
+          if (dist < minDistance) {
+            minDistance = dist;
+            closestCol = col;
+          }
+        });
+        
+        if (closestCol && minDistance < 80) {
+          closestCol.students.push(text);
+        }
+      });
+    }
+    
+    const pageGrid = [];
+    const blockFloors = columns.map(c => c.blockFloor);
+    const rooms = columns.map(c => c.room);
+    
+    pageGrid.push(blockFloors);
+    pageGrid.push(rooms);
+    
+    const maxStudents = Math.max(...columns.map(c => c.students.length));
+    for (let i = 0; i < maxStudents; i++) {
+      const row = columns.map(c => c.students[i] || "");
+      pageGrid.push(row);
+    }
+    
+    gridRows = [...gridRows, ...pageGrid];
+  }
+  
+  return gridRows;
+};
+
 export default function AdminDashboard({ onBack }) {
   const [file, setFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
@@ -309,6 +429,43 @@ export default function AdminDashboard({ onBack }) {
     setFile(selectedFile);
     const fileExtension = selectedFile.name.split(".").pop().toLowerCase();
 
+    if (fileExtension === "pdf") {
+      setUploadMode("grid");
+      setUploading(true);
+      setUploadStatus("Parsing PDF file...");
+      
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const arrayBuffer = e.target.result;
+          if (!window.pdfjsLib) {
+            alert("PDF reader library (pdfjs-dist) is not loaded yet. Please wait a moment and try again.");
+            setUploading(false);
+            setFile(null);
+            return;
+          }
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+          
+          const gridData = await parsePDFTableGrid(arrayBuffer);
+          if (gridData && gridData.length > 0) {
+            setParsedData(gridData);
+            setUploadStatus("PDF parsed successfully!");
+          } else {
+            alert("No seating arrangements found in PDF. Make sure it contains text, not just scanned images.");
+            setFile(null);
+          }
+        } catch (err) {
+          console.error("PDF Parsing Error:", err);
+          alert("Failed to parse PDF: " + err.message);
+          setFile(null);
+        } finally {
+          setUploading(false);
+        }
+      };
+      reader.readAsArrayBuffer(selectedFile);
+      return;
+    }
+
     if (uploadMode === "grid") {
       if (fileExtension === "csv") {
         Papa.parse(selectedFile, {
@@ -335,7 +492,8 @@ export default function AdminDashboard({ onBack }) {
         };
         reader.readAsArrayBuffer(selectedFile);
       } else {
-        alert("Unsupported file format. Please upload a CSV or Excel file.");
+        alert("Unsupported file format. Please upload a CSV, Excel, or PDF file.");
+        setFile(null);
       }
     } else {
       if (fileExtension === "csv") {
@@ -368,6 +526,7 @@ export default function AdminDashboard({ onBack }) {
         reader.readAsArrayBuffer(selectedFile);
       } else {
         alert("Unsupported file format. Please upload a CSV or Excel file.");
+        setFile(null);
       }
     }
   };
@@ -958,13 +1117,13 @@ export default function AdminDashboard({ onBack }) {
             >
               <Upload size={40} style={{ color: "var(--primary)", opacity: 0.8 }} />
               <div>
-                <p style={{ fontWeight: 600, fontSize: "0.95rem" }}>Drag & drop your CSV or Excel file here</p>
+                <p style={{ fontWeight: 600, fontSize: "0.95rem" }}>Drag & drop your CSV, Excel, or PDF file here</p>
                 <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>or click to browse your local files</p>
               </div>
               <input
                 id="fileInput"
                 type="file"
-                accept=".csv, .xlsx, .xls"
+                accept=".csv, .xlsx, .xls, .pdf"
                 onChange={handleFileChange}
                 style={{ display: "none" }}
               />
