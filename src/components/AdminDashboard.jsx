@@ -20,6 +20,29 @@ const DATABASE_FIELDS = [
   { key: "seatNumber", label: "Seat Number (Optional)", required: false },
 ];
 
+const parseBlockAndFloor = (str) => {
+  if (!str) return { block: "Unknown Block", floor: "Ground Floor" };
+  str = String(str).trim();
+  const floorRegex = /(ground floor|1st floor|2nd floor|3rd floor|4th floor|5th floor|6th floor|7th floor|8th floor|9th floor|first floor|second floor|third floor|fourth floor|fifth floor|sixth floor|seventh floor|eighth floor|ninth floor|tenth floor|floor\s+\d+|[\d]+[a-z]{2}\s+floor)/i;
+  
+  const match = str.match(floorRegex);
+  if (match) {
+    const floorMatch = match[0];
+    let block = str.replace(floorRegex, "").replace(/[-–—,()]/g, "").trim();
+    if (!block) block = "Main Block";
+    
+    const formattedFloor = floorMatch
+      .toLowerCase()
+      .split(" ")
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+      
+    return { block, floor: formattedFloor };
+  }
+  
+  return { block: str, floor: "Ground Floor" };
+};
+
 export default function AdminDashboard({ onBack }) {
   const [file, setFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
@@ -29,6 +52,10 @@ export default function AdminDashboard({ onBack }) {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState("");
+  const [uploadMode, setUploadMode] = useState("row"); // "row" | "grid"
+  const [gridExamDate, setGridExamDate] = useState("Thursday, June 18, 2026");
+  const [gridExamTime, setGridExamTime] = useState("Morning (10:00 AM - 01:00 PM)");
+  const [gridCourse, setGridCourse] = useState("IGNOU Term End Exam");
   
   // Analytics
   const [stats, setStats] = useState({ totalStudents: 0, totalRooms: 0, totalBlocks: 0 });
@@ -73,15 +100,39 @@ export default function AdminDashboard({ onBack }) {
   }, []);
 
   const fetchStatsAndData = async () => {
-    if (!isValidConfig || !db) return;
     setListLoading(true);
+    if (!isValidConfig || !db) {
+      try {
+        const localStudentsStr = localStorage.getItem("demo_students");
+        const items = localStudentsStr ? JSON.parse(localStudentsStr) : [];
+        setStudentsList(items.slice(0, 100));
+
+        const rooms = new Set();
+        const blocks = new Set();
+        items.forEach(data => {
+          if (data.roomNumber) rooms.add(data.roomNumber.toLowerCase().trim());
+          if (data.block) blocks.add(data.block.toLowerCase().trim());
+        });
+
+        setStats({
+          totalStudents: items.length,
+          totalRooms: rooms.size,
+          totalBlocks: blocks.size
+        });
+      } catch (e) {
+        console.error("Error loading offline admin stats:", e);
+      } finally {
+        setListLoading(false);
+      }
+      return;
+    }
+
     try {
       const studentsRef = collection(db, "students");
-      const snapshot = await getDocs(query(studentsRef, limit(100))); // load first 100
+      const snapshot = await getDocs(query(studentsRef, limit(100)));
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setStudentsList(items);
 
-      // Compute simple stats from all documents in db
       const allDocs = await getDocs(studentsRef);
       const rooms = new Set();
       const blocks = new Set();
@@ -105,14 +156,16 @@ export default function AdminDashboard({ onBack }) {
 
   // ─── Export to CSV / Excel ────────────────────────────────────────────────
   const handleExportCSV = async () => {
-    if (!isValidConfig || !db) {
-      alert("Firebase is not configured. Cannot export.");
-      return;
-    }
     setExporting(true);
     try {
-      const snapshot = await getDocs(collection(db, "students"));
-      const rows = snapshot.docs.map(d => d.data());
+      let rows = [];
+      if (!isValidConfig || !db) {
+        const localStudentsStr = localStorage.getItem("demo_students");
+        rows = localStudentsStr ? JSON.parse(localStudentsStr) : [];
+      } else {
+        const snapshot = await getDocs(collection(db, "students"));
+        rows = snapshot.docs.map(d => d.data());
+      }
       if (rows.length === 0) { alert("No records to export."); return; }
       const csv = Papa.unparse(rows.map(r => ({
         "Register Number": r.registerNumber,
@@ -141,14 +194,16 @@ export default function AdminDashboard({ onBack }) {
   };
 
   const handleExportXLSX = async () => {
-    if (!isValidConfig || !db) {
-      alert("Firebase is not configured. Cannot export.");
-      return;
-    }
     setExporting(true);
     try {
-      const snapshot = await getDocs(collection(db, "students"));
-      const rows = snapshot.docs.map(d => d.data());
+      let rows = [];
+      if (!isValidConfig || !db) {
+        const localStudentsStr = localStorage.getItem("demo_students");
+        rows = localStudentsStr ? JSON.parse(localStudentsStr) : [];
+      } else {
+        const snapshot = await getDocs(collection(db, "students"));
+        rows = snapshot.docs.map(d => d.data());
+      }
       if (rows.length === 0) { alert("No records to export."); return; }
       const sheetData = rows.map(r => ({
         "Register Number": r.registerNumber,
@@ -254,36 +309,66 @@ export default function AdminDashboard({ onBack }) {
     setFile(selectedFile);
     const fileExtension = selectedFile.name.split(".").pop().toLowerCase();
 
-    if (fileExtension === "csv") {
-      Papa.parse(selectedFile, {
-        header: true,
-        skipEmptyLines: true,
-        complete: (results) => {
-          if (results.data && results.data.length > 0) {
-            setHeaders(Object.keys(results.data[0]));
-            setParsedData(results.data);
-            autoMapHeaders(Object.keys(results.data[0]));
+    if (uploadMode === "grid") {
+      if (fileExtension === "csv") {
+        Papa.parse(selectedFile, {
+          header: false,
+          skipEmptyLines: true,
+          complete: (results) => {
+            if (results.data && results.data.length > 0) {
+              setParsedData(results.data);
+            }
+          },
+        });
+      } else if (["xlsx", "xls"].includes(fileExtension)) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+          
+          if (jsonData.length > 0) {
+            setParsedData(jsonData);
           }
-        },
-      });
-    } else if (["xlsx", "xls"].includes(fileExtension)) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: "array" });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-        
-        if (jsonData.length > 0) {
-          setHeaders(Object.keys(jsonData[0]));
-          setParsedData(jsonData);
-          autoMapHeaders(Object.keys(jsonData[0]));
-        }
-      };
-      reader.readAsArrayBuffer(selectedFile);
+        };
+        reader.readAsArrayBuffer(selectedFile);
+      } else {
+        alert("Unsupported file format. Please upload a CSV or Excel file.");
+      }
     } else {
-      alert("Unsupported file format. Please upload a CSV or Excel file.");
+      if (fileExtension === "csv") {
+        Papa.parse(selectedFile, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            if (results.data && results.data.length > 0) {
+              setHeaders(Object.keys(results.data[0]));
+              setParsedData(results.data);
+              autoMapHeaders(Object.keys(results.data[0]));
+            }
+          },
+        });
+      } else if (["xlsx", "xls"].includes(fileExtension)) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+          
+          if (jsonData.length > 0) {
+            setHeaders(Object.keys(jsonData[0]));
+            setParsedData(jsonData);
+            autoMapHeaders(Object.keys(jsonData[0]));
+          }
+        };
+        reader.readAsArrayBuffer(selectedFile);
+      } else {
+        alert("Unsupported file format. Please upload a CSV or Excel file.");
+      }
     }
   };
 
@@ -320,16 +405,17 @@ export default function AdminDashboard({ onBack }) {
   };
 
   const handleUploadToFirebase = async () => {
-    if (!isValidConfig || !db) {
-      alert("Firebase is not configured yet! Click database configuration to connect.");
-      return;
-    }
-
-    // Validate mappings
-    const missingFields = DATABASE_FIELDS.filter(f => f.required && !mapping[f.key]);
-    if (missingFields.length > 0) {
-      alert(`Please map all required fields: ${missingFields.map(f => f.label).join(", ")}`);
-      return;
+    if (uploadMode === "row") {
+      const missingFields = DATABASE_FIELDS.filter(f => f.required && !mapping[f.key]);
+      if (missingFields.length > 0) {
+        alert(`Please map all required fields: ${missingFields.map(f => f.label).join(", ")}`);
+        return;
+      }
+    } else {
+      if (!gridExamDate.trim() || !gridExamTime.trim()) {
+        alert("Please fill in Exam Date and Exam Time/Session for the grid layout.");
+        return;
+      }
     }
 
     setUploading(true);
@@ -337,52 +423,121 @@ export default function AdminDashboard({ onBack }) {
     setUploadStatus("Formatting data...");
 
     try {
-      // 1. Prepare data objects
-      const formattedStudents = parsedData.map((row) => {
-        const student = {};
-        DATABASE_FIELDS.forEach((field) => {
-          const mappedHeader = mapping[field.key];
-          student[field.key] = mappedHeader ? String(row[mappedHeader] || "").trim() : "";
+      let formattedStudents = [];
+      if (uploadMode === "grid") {
+        const numCols = Math.max(parsedData[0]?.length || 0, parsedData[1]?.length || 0);
+        let currentBlockFloor = "";
+
+        for (let colIdx = 0; colIdx < numCols; colIdx++) {
+          const cellBlockFloor = parsedData[0]?.[colIdx];
+          if (cellBlockFloor && String(cellBlockFloor).trim()) {
+            currentBlockFloor = String(cellBlockFloor).trim();
+          }
+
+          const roomText = parsedData[1]?.[colIdx];
+          if (!roomText || !String(roomText).trim()) {
+            continue;
+          }
+          const cleanedRoom = String(roomText).trim();
+          const parsedLoc = parseBlockAndFloor(currentBlockFloor);
+
+          for (let rowIdx = 2; rowIdx < parsedData.length; rowIdx++) {
+            const regVal = parsedData[rowIdx]?.[colIdx];
+            if (regVal !== undefined && regVal !== null) {
+              const regStr = String(regVal).replace(/\.0$/, "").trim();
+              if (regStr && regStr.length > 3) {
+                formattedStudents.push({
+                  registerNumber: regStr,
+                  registerNumberLower: regStr.toLowerCase(),
+                  name: "Student",
+                  course: gridCourse.trim() || "IGNOU Term End Exam",
+                  examDate: gridExamDate.trim() || "N/A",
+                  examTime: gridExamTime.trim() || "N/A",
+                  block: parsedLoc.block,
+                  floor: parsedLoc.floor,
+                  roomNumber: cleanedRoom,
+                  seatNumber: String(rowIdx - 1),
+                });
+              }
+            }
+          }
+        }
+      } else {
+        formattedStudents = parsedData.map((row) => {
+          const student = {};
+          DATABASE_FIELDS.forEach((field) => {
+            const mappedHeader = mapping[field.key];
+            student[field.key] = mappedHeader ? String(row[mappedHeader] || "").trim() : "";
+          });
+          student.registerNumberLower = student.registerNumber.toLowerCase();
+          return student;
         });
-        // Add lowercased register number for easy searching
-        student.registerNumberLower = student.registerNumber.toLowerCase();
-        return student;
-      });
-
-      // 2. Batch upload to Firestore (limit 500 per batch)
-      const batchSize = 200;
-      const totalDocs = formattedStudents.length;
-      let uploadedCount = 0;
-
-      for (let i = 0; i < totalDocs; i += batchSize) {
-        const batch = writeBatch(db);
-        const chunk = formattedStudents.slice(i, i + batchSize);
-
-        chunk.forEach((student) => {
-          const docRef = doc(collection(db, "students"), student.registerNumberLower);
-          batch.set(docRef, student);
-        });
-
-        setUploadStatus(`Uploading records ${i + 1} to ${Math.min(i + batchSize, totalDocs)} of ${totalDocs}...`);
-        await batch.commit();
-        
-        uploadedCount += chunk.length;
-        setUploadProgress(Math.round((uploadedCount / totalDocs) * 100));
       }
 
-      setUploadStatus("Successfully updated Firestore!");
-      confetti({
-        particleCount: 150,
-        spread: 80,
-        origin: { y: 0.6 }
-      });
+      if (formattedStudents.length === 0) {
+        alert("No valid seating records found in file.");
+        setUploading(false);
+        return;
+      }
 
-      // Reset states
-      setFile(null);
-      setParsedData([]);
-      fetchStatsAndData();
+      if (!isValidConfig || !db) {
+        setUploadStatus("Saving to offline database...");
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        const localStudentsStr = localStorage.getItem("demo_students");
+        let items = localStudentsStr ? JSON.parse(localStudentsStr) : [];
+        
+        const newRegNumbers = new Set(formattedStudents.map(s => s.registerNumberLower));
+        items = items.filter(s => !newRegNumbers.has(s.registerNumberLower));
+        
+        items = [...items, ...formattedStudents];
+        localStorage.setItem("demo_students", JSON.stringify(items));
+
+        setUploadProgress(100);
+        setUploadStatus("Successfully saved to offline memory!");
+        confetti({
+          particleCount: 150,
+          spread: 80,
+          origin: { y: 0.6 }
+        });
+
+        setFile(null);
+        setParsedData([]);
+        fetchStatsAndData();
+      } else {
+        const batchSize = 200;
+        const totalDocs = formattedStudents.length;
+        let uploadedCount = 0;
+
+        for (let i = 0; i < totalDocs; i += batchSize) {
+          const batch = writeBatch(db);
+          const chunk = formattedStudents.slice(i, i + batchSize);
+
+          chunk.forEach((student) => {
+            const docRef = doc(collection(db, "students"), student.registerNumberLower);
+            batch.set(docRef, student);
+          });
+
+          setUploadStatus(`Uploading records ${i + 1} to ${Math.min(i + batchSize, totalDocs)} of ${totalDocs}...`);
+          await batch.commit();
+          
+          uploadedCount += chunk.length;
+          setUploadProgress(Math.round((uploadedCount / totalDocs) * 100));
+        }
+
+        setUploadStatus("Successfully updated Firestore!");
+        confetti({
+          particleCount: 150,
+          spread: 80,
+          origin: { y: 0.6 }
+        });
+
+        setFile(null);
+        setParsedData([]);
+        fetchStatsAndData();
+      }
     } catch (error) {
-      console.error("Firebase Batch Upload Error:", error);
+      console.error("Upload Error:", error);
       setUploadStatus(`Upload failed: ${error.message}`);
     } finally {
       setUploading(false);
@@ -394,11 +549,16 @@ export default function AdminDashboard({ onBack }) {
       return;
     }
 
-    if (!isValidConfig || !db) return;
-
     setUploading(true);
     setUploadStatus("Clearing seating database...");
     try {
+      if (!isValidConfig || !db) {
+        localStorage.removeItem("demo_students");
+        setUploadStatus("Database cleared successfully!");
+        fetchStatsAndData();
+        return;
+      }
+
       const studentsRef = collection(db, "students");
       const snapshot = await getDocs(studentsRef);
       
@@ -454,10 +614,6 @@ export default function AdminDashboard({ onBack }) {
 
   const handleSaveStudent = async (e) => {
     e.preventDefault();
-    if (!isValidConfig || !db) {
-      alert("Firebase configuration is invalid. Please configure the connection first.");
-      return;
-    }
 
     const regNum = formRegisterNumber.trim();
     const regNumLower = regNum.toLowerCase();
@@ -483,7 +639,27 @@ export default function AdminDashboard({ onBack }) {
         seatNumber: formSeatNumber.trim()
       };
 
-      // If editing and registration number has changed, remove old document
+      if (!isValidConfig || !db) {
+        const localStudentsStr = localStorage.getItem("demo_students");
+        let items = localStudentsStr ? JSON.parse(localStudentsStr) : [];
+        
+        items = items.filter(s => s.registerNumberLower !== regNumLower && (!editingStudent || s.registerNumberLower !== editingStudent.registerNumberLower));
+        
+        items.push(studentData);
+        localStorage.setItem("demo_students", JSON.stringify(items));
+        
+        setUploadStatus(editingStudent ? "Student seating updated offline!" : "Student seating added manually offline!");
+        setShowStudentModal(false);
+        fetchStatsAndData();
+        
+        confetti({
+          particleCount: 50,
+          spread: 40,
+          origin: { y: 0.8 }
+        });
+        return;
+      }
+
       if (editingStudent && editingStudent.registerNumberLower !== regNumLower) {
         const oldDocRef = doc(db, "students", editingStudent.registerNumberLower);
         await deleteDoc(oldDocRef);
@@ -514,10 +690,17 @@ export default function AdminDashboard({ onBack }) {
       return;
     }
 
-    if (!isValidConfig || !db) return;
-
     setListLoading(true);
     try {
+      if (!isValidConfig || !db) {
+        const localStudentsStr = localStorage.getItem("demo_students");
+        let items = localStudentsStr ? JSON.parse(localStudentsStr) : [];
+        items = items.filter(s => s.registerNumberLower !== student.registerNumberLower);
+        localStorage.setItem("demo_students", JSON.stringify(items));
+        fetchStatsAndData();
+        return;
+      }
+
       const docRef = doc(db, "students", student.registerNumberLower);
       await deleteDoc(docRef);
       fetchStatsAndData();
@@ -673,6 +856,97 @@ export default function AdminDashboard({ onBack }) {
             Download Sample CSV
           </button>
 
+          {/* Mode Tabs */}
+          <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", borderBottom: "1px solid rgba(255, 255, 255, 0.05)", paddingBottom: "0.75rem" }}>
+            <button
+              onClick={() => { setUploadMode("row"); setFile(null); setParsedData([]); }}
+              className={`btn ${uploadMode === "row" ? "btn-primary" : "btn-secondary"}`}
+              style={{ fontSize: "0.85rem", padding: "0.5rem 1rem" }}
+              type="button"
+            >
+              Standard Table (Row-by-Row)
+            </button>
+            <button
+              onClick={() => { setUploadMode("grid"); setFile(null); setParsedData([]); }}
+              className={`btn ${uploadMode === "grid" ? "btn-primary" : "btn-secondary"}`}
+              style={{ fontSize: "0.85rem", padding: "0.5rem 1rem" }}
+              type="button"
+            >
+              Column Seating Plan (PDF Grid)
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.25rem" }}>
+            {uploadMode === "row" ? (
+              <button onClick={handleDownloadSampleCSV} className="btn btn-muted" style={{ fontSize: "0.82rem", padding: "0.4rem 0.8rem" }} type="button">
+                Download Sample CSV (Row)
+              </button>
+            ) : (
+              <button 
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = `${window.location.origin}/sample_grid_seating.csv`;
+                  link.download = 'sample_grid_seating.csv';
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }} 
+                className="btn btn-muted" 
+                style={{ fontSize: "0.82rem", padding: "0.4rem 0.8rem" }}
+                type="button"
+              >
+                Download Sample CSV (Grid)
+              </button>
+            )}
+          </div>
+
+          {/* Grid Metadata Fields */}
+          {uploadMode === "grid" && (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "1.25rem",
+              marginBottom: "1.5rem",
+              padding: "1.25rem",
+              background: "rgba(255,255,255,0.01)",
+              border: "1px solid rgba(255,255,255,0.04)",
+              borderRadius: "var(--radius-md)"
+            }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: "0.75rem" }}>Exam Date *</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="e.g. Thursday, June 18, 2026"
+                  value={gridExamDate}
+                  onChange={(e) => setGridExamDate(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: "0.75rem" }}>Exam Time / Session *</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="e.g. Morning (10:00 AM - 01:00 PM)"
+                  value={gridExamTime}
+                  onChange={(e) => setGridExamTime(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: "0.75rem" }}>Course Name (Default)</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="e.g. IGNOU June TEE"
+                  value={gridCourse}
+                  onChange={(e) => setGridCourse(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
           {!file ? (
             <div
               className={`upload-dropzone ${dragActive ? "drag-active" : ""}`}
@@ -702,7 +976,7 @@ export default function AdminDashboard({ onBack }) {
                 <div style={{ flexGrow: 1 }}>
                   <p style={{ fontWeight: 600, fontSize: "0.95rem" }}>{file.name}</p>
                   <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                    {(file.size / 1024).toFixed(1)} KB • {parsedData.length} records parsed
+                    {(file.size / 1024).toFixed(1)} KB • {uploadMode === "grid" ? `${parsedData[0]?.length || 0} columns parsed` : `${parsedData.length} records parsed`}
                   </p>
                 </div>
                 <button onClick={() => { setFile(null); setParsedData([]); }} className="btn btn-secondary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}>
@@ -710,35 +984,111 @@ export default function AdminDashboard({ onBack }) {
                 </button>
               </div>
 
-              {/* Column Mapping Section */}
-              <div style={mappingBoxStyle}>
-                <h3 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "1rem", color: "var(--text-primary)", borderBottom: "1px solid rgba(255, 255, 255, 0.05)", paddingBottom: "0.5rem" }}>
-                  Map Spreadsheet Columns
-                </h3>
-                
-                <div className="mapping-grid">
-                  {DATABASE_FIELDS.map((dbField) => {
-                    const isMapped = !!mapping[dbField.key];
-                    return (
-                      <div key={dbField.key} style={mappingItemStyle}>
-                        <label style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--text-secondary)" }}>
-                          {dbField.label} {dbField.required && <span style={{ color: "var(--danger)" }}>*</span>}
-                        </label>
-                        <select
-                          value={mapping[dbField.key] || ""}
-                          onChange={(e) => handleMapChange(dbField.key, e.target.value)}
-                          style={selectStyle}
-                        >
-                          <option value="">-- Choose Column --</option>
-                          {headers.map((h) => (
-                            <option key={h} value={h}>{h}</option>
-                          ))}
-                        </select>
-                      </div>
-                    );
-                  })}
+              {/* Column Mapping Section for Row Mode */}
+              {uploadMode === "row" && (
+                <div style={mappingBoxStyle}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "1rem", color: "var(--text-primary)", borderBottom: "1px solid rgba(255, 255, 255, 0.05)", paddingBottom: "0.5rem" }}>
+                    Map Spreadsheet Columns
+                  </h3>
+                  
+                  <div className="mapping-grid">
+                    {DATABASE_FIELDS.map((dbField) => {
+                      const isMapped = !!mapping[dbField.key];
+                      return (
+                        <div key={dbField.key} style={mappingItemStyle}>
+                          <label style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--text-secondary)" }}>
+                            {dbField.label} {dbField.required && <span style={{ color: "var(--danger)" }}>*</span>}
+                          </label>
+                          <select
+                            value={mapping[dbField.key] || ""}
+                            onChange={(e) => handleMapChange(dbField.key, e.target.value)}
+                            style={selectStyle}
+                          >
+                            <option value="">-- Choose Column --</option>
+                            {headers.map((h) => (
+                              <option key={h} value={h}>{h}</option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Grid Mode Preview Section */}
+              {uploadMode === "grid" && parsedData && parsedData.length > 0 && (
+                <div style={{ marginTop: "1.5rem" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "1rem", color: "var(--text-primary)", borderBottom: "1px solid rgba(255, 255, 255, 0.05)", paddingBottom: "0.5rem" }}>
+                    Grid Layout Preview ({parsedData[0]?.length || 0} Rooms Detected)
+                  </h3>
+                  <div style={{
+                    display: "flex",
+                    gap: "1rem",
+                    overflowX: "auto",
+                    paddingBottom: "1rem",
+                    scrollbarWidth: "thin"
+                  }}>
+                    {Array.from({ length: parsedData[0]?.length || 0 }).map((_, colIdx) => {
+                      const blockFloor = parsedData[0]?.[colIdx] || "(Same as left)";
+                      const room = parsedData[1]?.[colIdx] || "Unknown Room";
+                      
+                      // Count register numbers in this column
+                      let count = 0;
+                      for (let r = 2; r < parsedData.length; r++) {
+                        if (parsedData[r]?.[colIdx] && String(parsedData[r]?.[colIdx]).trim()) {
+                          count++;
+                        }
+                      }
+                      
+                      return (
+                        <div key={colIdx} style={{
+                          minWidth: "180px",
+                          background: "rgba(255,255,255,0.02)",
+                          border: "1px solid var(--border-light)",
+                          borderRadius: "var(--radius-md)",
+                          padding: "1rem",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.5rem"
+                        }}>
+                          <div style={{ fontSize: "0.7rem", color: "var(--text-secondary)", fontWeight: 500 }}>
+                            {blockFloor}
+                          </div>
+                          <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--primary)" }}>
+                            {room}
+                          </div>
+                          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>
+                            {count} Students Seated
+                          </div>
+                          <div style={{
+                            maxHeight: "120px",
+                            overflowY: "auto",
+                            background: "rgba(0,0,0,0.2)",
+                            padding: "0.5rem",
+                            borderRadius: "4px",
+                            fontSize: "0.75rem",
+                            fontFamily: "monospace",
+                            border: "1px solid rgba(255,255,255,0.05)"
+                          }}>
+                            {Array.from({ length: Math.min(5, parsedData.length - 2) }).map((_, i) => {
+                              const reg = parsedData[i + 2]?.[colIdx];
+                              return reg && String(reg).trim() ? (
+                                <div key={i} style={{ padding: "1px 0" }}>{String(reg).trim()}</div>
+                              ) : null;
+                            })}
+                            {parsedData.length - 2 > 5 && (
+                              <div style={{ color: "var(--text-muted)", fontStyle: "italic", fontSize: "0.7rem", marginTop: "2px" }}>
+                                + {parsedData.length - 2 - 5} more...
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Upload actions */}
               <div style={{ display: "flex", gap: "1rem", marginTop: "1.5rem", justifyContent: "flex-end" }}>
@@ -756,7 +1106,7 @@ export default function AdminDashboard({ onBack }) {
                   ) : (
                     <>
                       <Database size={16} />
-                      Commit to Firestore
+                      {(!isValidConfig || !db) ? "Commit to Offline DB" : "Commit to Firestore"}
                     </>
                   )}
                 </button>

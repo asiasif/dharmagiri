@@ -62,6 +62,45 @@ export default function StudentDashboard({ user, onLogout }) {
   const [isDemoMode, setIsDemoMode] = useState(!isValidConfig);
   const [showHelpDesk, setShowHelpDesk] = useState(false);
 
+  const getDynamicLayout = () => {
+    const baseLayout = [
+      { floor: "Fifth Floor", rooms: ["Room 501", "Room 502", "Room 503"] },
+      { floor: "Fourth Floor", rooms: ["Room 401", "Room 402", "Room 403"] },
+      { floor: "Third Floor", rooms: ["Room 301", "Room 302", "Room 303", "Room 304", "Room 305"] },
+      { floor: "Second Floor", rooms: ["Room 201", "Room 202", "Room 205", "Room 206", "Room 208"] },
+      { floor: "First Floor", rooms: ["Room 101", "Room 102", "Room 103", "Room 104", "Room 105"] },
+      { floor: "Ground Floor", rooms: ["Room 001", "Room 002", "Room 003", "Room 004", "Room 005"] },
+    ];
+
+    if (!studentData) return baseLayout;
+
+    const targetFloor = studentData.floor ? String(studentData.floor).trim() : "";
+    const targetRoom = studentData.roomNumber ? String(studentData.roomNumber).trim() : "";
+
+    if (!targetFloor || !targetRoom) return baseLayout;
+
+    let matchedFloor = baseLayout.find(
+      (f) => f.floor.toLowerCase() === targetFloor.toLowerCase()
+    );
+
+    if (matchedFloor) {
+      const roomClean = targetRoom.toLowerCase().replace("room", "").trim();
+      const roomExists = matchedFloor.rooms.some(
+        (r) => r.toLowerCase().replace("room", "").trim() === roomClean
+      );
+      if (!roomExists) {
+        matchedFloor.rooms.push(targetRoom);
+      }
+    } else {
+      baseLayout.unshift({
+        floor: targetFloor,
+        rooms: [targetRoom]
+      });
+    }
+
+    return baseLayout;
+  };
+
   // Announcements
   const [announcements, setAnnouncements] = useState([]);
   const [dismissedIds, setDismissedIds] = useState(() => {
@@ -114,7 +153,6 @@ export default function StudentDashboard({ user, onLogout }) {
           const docData = querySnapshot.docs[0].data();
           setStudentData(docData);
           setLoading(false);
-          // 🎉 Fire confetti on successful find
           setTimeout(() => {
             confetti({ particleCount: 120, spread: 90, origin: { y: 0.55 }, colors: ["#6366f1", "#14b8a6", "#f59e0b", "#a78bfa", "#34d399"] });
           }, 400);
@@ -125,7 +163,27 @@ export default function StudentDashboard({ user, onLogout }) {
       }
     }
 
-    // 2. Fallback to Demo Data
+    // 2. Search in offline LocalStorage database
+    const localStudentsStr = localStorage.getItem("demo_students");
+    if (localStudentsStr) {
+      try {
+        const localStudents = JSON.parse(localStudentsStr);
+        const match = localStudents.find(s => s.registerNumberLower === formattedQuery);
+        if (match) {
+          setStudentData(match);
+          setIsDemoMode(true);
+          setLoading(false);
+          setTimeout(() => {
+            confetti({ particleCount: 120, spread: 90, origin: { y: 0.55 }, colors: ["#6366f1", "#14b8a6", "#f59e0b", "#a78bfa", "#34d399"] });
+          }, 400);
+          return;
+        }
+      } catch (e) {
+        console.error("Error parsing local offline students:", e);
+      }
+    }
+
+    // 3. Fallback to Demo Data
     const localMatch = MOCK_STUDENTS.find(
       (s) => s.registerNumber.toLowerCase() === formattedQuery
     );
@@ -395,7 +453,7 @@ export default function StudentDashboard({ user, onLogout }) {
                   </div>
                   
                   <div className="floor-indicator">
-                    {CAMPUS_LAYOUT.map((layout) => {
+                    {getDynamicLayout().map((layout) => {
                       const isTargetFloor = studentData.floor.toLowerCase().trim() === layout.floor.toLowerCase().trim();
                       return (
                         <div key={layout.floor} className={`floor-row ${isTargetFloor ? "active" : ""}`}>
