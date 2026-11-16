@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Database, Trash2, QrCode, ArrowLeft, Loader, Users, Layout, Compass, ShieldCheck, Download, Search, Edit, Plus, X, Bell, BellOff, Pin, Megaphone, FileDown, Copy, ExternalLink, HardDrive, Save } from "lucide-react";
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Database, Trash2, QrCode, ArrowLeft, Loader, Users, Layout, Compass, ShieldCheck, Download, Search, Edit, Plus, X, Bell, Megaphone, FileDown, Settings, HardDrive, Save } from "lucide-react";
+import FirebaseConfigModal from "./FirebaseConfigModal";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
@@ -279,6 +280,8 @@ export default function AdminDashboard({ onBack }) {
   // Firestore Security Rules Helper Modal state
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [copiedRules, setCopiedRules] = useState(false);
+  // Firebase Config Modal
+  const [showFirebaseModal, setShowFirebaseModal] = useState(false);
 
   useEffect(() => {
     fetchStatsAndData();
@@ -823,8 +826,11 @@ export default function AdminDashboard({ onBack }) {
           confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
 
           if (isPermission) {
-            setUploadStatus(`⚠️ Saved ${formattedStudents.length} records locally! (Firestore write was blocked by Firebase security rules)`);
-            setShowRulesModal(true); // Pop up the rule helper with one-click copy!
+            setUploadStatus(`⚠️ Saved ${formattedStudents.length} records locally! Firestore write was blocked — click "Firebase Settings" to reconnect.`);
+            setShowFirebaseModal(true); // Open Firebase Settings so admin can fix config
+          } else {
+            setUploadStatus(`⚠️ Saved ${formattedStudents.length} records locally: ${firestoreError.message}`);
+          }
           } else {
             setUploadStatus(`⚠️ Saved ${formattedStudents.length} records locally: ${firestoreError.message}`);
           }
@@ -1120,13 +1126,13 @@ export default function AdminDashboard({ onBack }) {
 
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
           <button
-            onClick={() => setShowRulesModal(true)}
+            onClick={() => setShowFirebaseModal(true)}
             className="btn btn-secondary"
             style={{ fontSize: "0.78rem", padding: "0.45rem 0.85rem", gap: "0.4rem" }}
-            title="Configure Firestore Security Rules"
+            title="Configure Firebase / Firestore Connection"
           >
-            <ShieldCheck size={14} style={{ color: "var(--accent)" }} />
-            <span>Firestore Rules Helper</span>
+            <Settings size={14} style={{ color: "var(--accent)" }} />
+            <span>Firebase Settings</span>
           </button>
         </div>
       </header>
@@ -1585,12 +1591,12 @@ export default function AdminDashboard({ onBack }) {
               {(uploadStatus.toLowerCase().includes("permission") || uploadStatus.toLowerCase().includes("rule") || uploadStatus.includes("⚠️")) && (
                 <button
                   type="button"
-                  onClick={() => setShowRulesModal(true)}
+                  onClick={() => setShowFirebaseModal(true)}
                   className="btn btn-secondary"
                   style={{ fontSize: "0.78rem", padding: "0.35rem 0.75rem", gap: "0.35rem", whiteSpace: "nowrap" }}
                 >
-                  <ShieldCheck size={14} style={{ color: "var(--accent)" }} />
-                  Configure Rules
+                  <Settings size={14} style={{ color: "var(--accent)" }} />
+                  Firebase Settings
                 </button>
               )}
             </div>
@@ -2131,142 +2137,11 @@ export default function AdminDashboard({ onBack }) {
         )}
       </AnimatePresence>
 
-      {/* ── Firestore Security Rules Helper Modal ────────────────────── */}
-      <AnimatePresence>
-        {showRulesModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="responsive-modal-overlay"
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 15 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 15 }}
-              transition={{ type: "spring", duration: 0.4 }}
-              className="glass-panel responsive-modal-content"
-              style={{ maxWidth: "620px" }}
-            >
-              <div style={modalHeaderStyle}>
-                <h2 style={{ fontSize: "1.2rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--primary)" }}>
-                  <ShieldCheck size={22} style={{ color: "var(--accent)" }} />
-                  Firestore Security Rules Setup
-                </h2>
-                <button
-                  onClick={() => setShowRulesModal(false)}
-                  className="btn btn-secondary"
-                  style={modalCloseBtnStyle}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                <div style={{ background: "rgba(197, 155, 39, 0.08)", border: "1px solid rgba(197, 155, 39, 0.25)", borderRadius: "var(--radius-md)", padding: "0.85rem 1rem", fontSize: "0.85rem", color: "var(--text-primary)" }}>
-                  <p style={{ margin: 0, fontWeight: 600 }}>Why did "Missing or insufficient permissions" occur?</p>
-                  <p style={{ margin: "0.35rem 0 0 0", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                    Firebase Cloud Firestore starts in <strong>Production Mode</strong> by default, which blocks all reads and writes until security rules are configured.
-                  </p>
-                </div>
-
-                <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                  <p style={{ margin: "0 0 0.5rem 0", fontWeight: 600, color: "var(--primary)" }}>3 Easy Steps to Fix:</p>
-                  <ol style={{ margin: 0, paddingLeft: "1.25rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                    <li>Open your Firebase Console and go to <strong>Firestore Database &gt; Rules</strong> tab.</li>
-                    <li>Replace existing contents with the rule snippet below.</li>
-                    <li>Click <strong>Publish</strong>.</li>
-                  </ol>
-                </div>
-
-                <div style={{ position: "relative" }}>
-                  <pre style={{
-                    background: "#0a192f",
-                    color: "#e2e8f0",
-                    padding: "1rem",
-                    borderRadius: "8px",
-                    fontSize: "0.8rem",
-                    fontFamily: "monospace",
-                    overflowX: "auto",
-                    margin: 0
-                  }}>
-{`rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
-    }
-  }
-}`}
-                  </pre>
-                  <button
-                    onClick={() => {
-                      const rules = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}`;
-                      navigator.clipboard.writeText(rules);
-                      setCopiedRules(true);
-                      setTimeout(() => setCopiedRules(false), 2500);
-                    }}
-                    className="btn btn-accent"
-                    style={{
-                      position: "absolute",
-                      top: "0.5rem",
-                      right: "0.5rem",
-                      fontSize: "0.75rem",
-                      padding: "0.3rem 0.65rem",
-                      gap: "0.3rem"
-                    }}
-                  >
-                    <Copy size={13} />
-                    {copiedRules ? "Copied!" : "Copy Rules"}
-                  </button>
-                </div>
-
-                {/* Local Sync helper */}
-                <div style={{ background: "#f8fafc", border: "1px solid rgba(10, 45, 84, 0.1)", borderRadius: "var(--radius-md)", padding: "1rem" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
-                    <HardDrive size={16} style={{ color: "var(--primary)" }} />
-                    <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--primary)" }}>Sync Local Records to Firestore</span>
-                  </div>
-                  <p style={{ margin: "0 0 0.75rem 0", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                    Any records uploaded while permissions were blocked were automatically backed up to local storage so nothing is lost. Click below after publishing your rules to push them to the cloud.
-                  </p>
-                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-                    <button
-                      onClick={handleSyncLocalToFirestore}
-                      disabled={uploading}
-                      className="btn btn-primary"
-                      style={{ fontSize: "0.82rem", padding: "0.45rem 1rem" }}
-                    >
-                      {uploading ? <Loader size={14} className="spin" /> : <Database size={14} />}
-                      Sync Local Records Now
-                    </button>
-                    <a
-                      href="https://console.firebase.google.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-secondary"
-                      style={{ fontSize: "0.82rem", padding: "0.45rem 1rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
-                    >
-                      <ExternalLink size={14} />
-                      Open Firebase Console
-                    </a>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "0.5rem" }}>
-                  <button
-                    onClick={() => setShowRulesModal(false)}
-                    className="btn btn-secondary"
-                    style={{ minWidth: "90px" }}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* ── Firebase Config Modal ────────────────────────────────────── */}
+      <FirebaseConfigModal
+        isOpen={showFirebaseModal || showRulesModal}
+        onClose={() => { setShowFirebaseModal(false); setShowRulesModal(false); }}
+      />
 
       {/* Embedded CSS class styling tricks for uploader */}
       <style dangerouslySetInnerHTML={{__html: `

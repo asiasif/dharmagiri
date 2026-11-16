@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogIn, Key, ShieldCheck, Sparkles, Database, Settings, RefreshCw, Eye, EyeOff } from "lucide-react";
-import { onAuthStateChanged, signInWithPopup } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { auth, googleProvider, db, isValidConfig, loginWithGoogle, logout, ensureAdminAuth } from "./firebase";
+import { LogIn, ShieldCheck, Sparkles, Database, Settings, RefreshCw, Eye, EyeOff } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db, isValidConfig, loginWithGoogle, logout, ensureAdminAuth } from "./firebase";
 
 import StudentDashboard from "./components/StudentDashboard";
 import AdminDashboard from "./components/AdminDashboard";
 import DharmagiriLogo from "./components/DharmagiriLogo";
 import AnimatedText from "./components/AnimatedText";
+import FirebaseConfigModal from "./components/FirebaseConfigModal";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -25,6 +26,9 @@ export default function App() {
   const [adminPassword, setAdminPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  // Firebase Config Modal
+  const [showFirebaseModal, setShowFirebaseModal] = useState(false);
 
   useEffect(() => {
     // Check if there is an active local admin session stored
@@ -327,12 +331,22 @@ export default function App() {
                       <ShieldCheck size={18} style={{ color: "var(--accent-gold)" }} />
                       Staff / Admin Portal
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowFirebaseModal(true)}
+                      className="btn btn-secondary"
+                      style={{ width: "100%", fontSize: "0.82rem", padding: "0.6rem 1rem", gap: "0.5rem", color: "var(--text-secondary)", borderStyle: "dashed" }}
+                    >
+                      <Settings size={15} style={{ color: "var(--primary)" }} />
+                      {isValidConfig ? "Change Firebase Connection" : "Connect Firebase Database"}
+                    </button>
                   </div>
 
                   {isDemoMode && (
                     <div style={demoWarningStyle}>
                       <Database size={13} />
-                      <span>Preview Environment Active (Offline Mode)</span>
+                      <span>Preview Environment Active (Offline Mode) — connect Firebase above</span>
                     </div>
                   )}
                 </>
@@ -380,6 +394,12 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Firebase Config Modal — always accessible */}
+      <FirebaseConfigModal
+        isOpen={showFirebaseModal}
+        onClose={() => setShowFirebaseModal(false)}
+      />
 
       {/* Embedded CSS class styling tricks for uploader */}
       <style dangerouslySetInnerHTML={{__html: `

@@ -1,67 +1,83 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Database, Key, Check, Info, ShieldAlert, Sparkles, X } from "lucide-react";
+import { Database, Check, Info, ShieldAlert, X, ClipboardPaste, ExternalLink, Trash2 } from "lucide-react";
+
+/*
+  FirebaseConfigModal — lets the admin paste the full Firebase SDK config snippet
+  (the object from Firebase Console → Project Settings → Your Apps → SDK setup)
+  or fill individual fields manually.
+*/
+
+function parseFirebaseSnippet(text) {
+  // Try to parse a pasted JS/JSON firebase config object
+  try {
+    // Handle format: const firebaseConfig = { ... }; or just { ... }
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    // Convert JS object notation to valid JSON (quoted keys)
+    const jsonStr = jsonMatch[0]
+      .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":')
+      .replace(/'/g, '"');
+    return JSON.parse(jsonStr);
+  } catch {
+    return null;
+  }
+}
 
 export default function FirebaseConfigModal({ isOpen, onClose }) {
+  const [mode, setMode] = useState("paste"); // "paste" | "manual"
+  const [pasteText, setPasteText] = useState("");
+  const [pasteError, setPasteError] = useState("");
+
   const [config, setConfig] = useState(() => {
     const saved = localStorage.getItem("firebaseConfig");
     if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
+      try { return JSON.parse(saved); } catch (e) {}
     }
-    return {
-      apiKey: "",
-      authDomain: "",
-      projectId: "",
-      storageBucket: "",
-      messagingSenderId: "",
-      appId: "",
-    };
+    return { apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: "" };
   });
 
   const [isSaved, setIsSaved] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setConfig((prev) => ({ ...prev, [name]: value.trim() }));
-  };
-
-  const handleSave = (e) => {
-    e.preventDefault();
-    setErrorMessage("");
-
-    if (!config.apiKey || !config.projectId || !config.authDomain) {
-      setErrorMessage("API Key, Project ID, and Auth Domain are required.");
+  const handlePasteApply = () => {
+    setPasteError("");
+    const parsed = parseFirebaseSnippet(pasteText);
+    if (!parsed || !parsed.apiKey || !parsed.projectId) {
+      setPasteError("Could not read the config. Please paste the full firebaseConfig object from your Firebase Console.");
       return;
     }
+    setConfig(parsed);
+    saveConfig(parsed);
+  };
 
+  const saveConfig = (cfg) => {
     try {
-      localStorage.setItem("firebaseConfig", JSON.stringify(config));
+      localStorage.setItem("firebaseConfig", JSON.stringify(cfg));
       setIsSaved(true);
       setTimeout(() => {
         setIsSaved(false);
         onClose();
-        // Reload to apply new Firebase config
         window.location.reload();
       }, 1500);
-    } catch (err) {
+    } catch {
       setErrorMessage("Failed to save configuration.");
     }
   };
 
-  const handleLoadDemo = () => {
-    // Fill with sample placeholders to show UI/UX
-    const demoConfig = {
-      apiKey: "AIzaSyDemoKey1234567890_PlaceholderOnly",
-      authDomain: "dharmagiri-ignou-exam.firebaseapp.com",
-      projectId: "dharmagiri-ignou-exam",
-      storageBucket: "dharmagiri-ignou-exam.appspot.com",
-      messagingSenderId: "123456789012",
-      appId: "1:123456789012:web:abcdef1234567890",
-    };
-    setConfig(demoConfig);
+  const handleManualSave = (e) => {
+    e.preventDefault();
+    setErrorMessage("");
+    if (!config.apiKey || !config.projectId || !config.authDomain) {
+      setErrorMessage("API Key, Project ID, and Auth Domain are required.");
+      return;
+    }
+    saveConfig(config);
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setConfig(prev => ({ ...prev, [name]: value.trim() }));
   };
 
   const handleClear = () => {
@@ -71,24 +87,29 @@ export default function FirebaseConfigModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
+  const hasExistingConfig = !!localStorage.getItem("firebaseConfig");
+
   return (
     <AnimatePresence>
-      <div className="modal-overlay" style={overlayStyle}>
+      <div style={overlayStyle}>
         <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          initial={{ opacity: 0, scale: 0.93, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          transition={{ type: "spring", duration: 0.5 }}
+          exit={{ opacity: 0, scale: 0.93, y: 20 }}
+          transition={{ type: "spring", duration: 0.45 }}
           className="glass-panel"
           style={modalStyle}
         >
+          {/* Header */}
           <div style={headerStyle}>
-            <div style={titleContainerStyle}>
-              <Database className="gradient-text" style={{ width: 28, height: 28 }} />
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <Database style={{ width: 26, height: 26, color: "var(--primary)" }} />
               <div>
-                <h2 style={{ fontSize: "1.3rem", fontWeight: 700 }}>Firebase Integration Setup</h2>
-                <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                  Configure your Firestore and Auth Backend
+                <h2 style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--primary)", margin: 0 }}>
+                  Firebase Setup
+                </h2>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: 0 }}>
+                  Connect your Firestore database in seconds
                 </p>
               </div>
             </div>
@@ -97,150 +118,166 @@ export default function FirebaseConfigModal({ isOpen, onClose }) {
             </button>
           </div>
 
+          {/* Info tip */}
           <div style={alertBoxStyle}>
-            <Info size={16} style={{ color: "var(--primary)", flexShrink: 0, marginTop: 2 }} />
-            <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", lineHeight: 1.4 }}>
-              This web application runs fully serverless. Your Firebase project credentials will be stored securely 
-              in your browser's local storage. None of this information is sent to third parties.
+            <Info size={15} style={{ color: "var(--primary)", flexShrink: 0, marginTop: 1 }} />
+            <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
+              Go to <strong>Firebase Console</strong> → Your Project → <strong>Project Settings</strong> → <em>Your Apps</em> → Copy the <strong>firebaseConfig</strong> object and paste it below.
+              &nbsp;
+              <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer"
+                style={{ color: "var(--primary)", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "0.2rem" }}>
+                Open Console <ExternalLink size={11} />
+              </a>
             </p>
           </div>
 
-          <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <div style={gridStyle}>
-              <div className="form-group">
-                <label className="form-label">API Key</label>
-                <input
-                  type="password"
-                  name="apiKey"
-                  value={config.apiKey}
-                  onChange={handleChange}
-                  placeholder="AIzaSy..."
-                  className="input-field"
-                  required
+          {/* Mode Tabs */}
+          <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.25rem" }}>
+            <button
+              type="button"
+              onClick={() => setMode("paste")}
+              className={`btn ${mode === "paste" ? "btn-primary" : "btn-secondary"}`}
+              style={{ fontSize: "0.82rem", padding: "0.4rem 1rem" }}
+            >
+              <ClipboardPaste size={14} />
+              Paste Config
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("manual")}
+              className={`btn ${mode === "manual" ? "btn-primary" : "btn-secondary"}`}
+              style={{ fontSize: "0.82rem", padding: "0.4rem 1rem" }}
+            >
+              Manual Entry
+            </button>
+          </div>
+
+          {/* PASTE MODE */}
+          {mode === "paste" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+              <div>
+                <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-secondary)", display: "block", marginBottom: "0.4rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Paste your firebaseConfig here
+                </label>
+                <textarea
+                  value={pasteText}
+                  onChange={e => { setPasteText(e.target.value); setPasteError(""); }}
+                  placeholder={`const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "yourproject.firebaseapp.com",
+  projectId: "yourproject",
+  storageBucket: "yourproject.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abc..."
+};`}
+                  rows={9}
+                  style={{
+                    width: "100%",
+                    fontFamily: "monospace",
+                    fontSize: "0.78rem",
+                    padding: "0.85rem",
+                    border: pasteError ? "1.5px solid #ef4444" : "1.5px solid rgba(10, 45, 84, 0.18)",
+                    borderRadius: "var(--radius-md)",
+                    background: "#f8fafc",
+                    color: "#1e293b",
+                    resize: "vertical",
+                    outline: "none",
+                    lineHeight: 1.6,
+                    boxSizing: "border-box"
+                  }}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Project ID</label>
-                <input
-                  type="text"
-                  name="projectId"
-                  value={config.projectId}
-                  onChange={handleChange}
-                  placeholder="dharmagiri-ignou"
-                  className="input-field"
-                  required
-                />
-              </div>
+              {pasteError && (
+                <div style={errorStyle}>
+                  <ShieldAlert size={15} />
+                  <span>{pasteError}</span>
+                </div>
+              )}
 
-              <div className="form-group">
-                <label className="form-label">Auth Domain</label>
-                <input
-                  type="text"
-                  name="authDomain"
-                  value={config.authDomain}
-                  onChange={handleChange}
-                  placeholder="dharmagiri-ignou.firebaseapp.com"
-                  className="input-field"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Storage Bucket</label>
-                <input
-                  type="text"
-                  name="storageBucket"
-                  value={config.storageBucket}
-                  onChange={handleChange}
-                  placeholder="dharmagiri-ignou.appspot.com"
-                  className="input-field"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Messaging Sender ID</label>
-                <input
-                  type="text"
-                  name="messagingSenderId"
-                  value={config.messagingSenderId}
-                  onChange={handleChange}
-                  placeholder="854930281249"
-                  className="input-field"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">App ID</label>
-                <input
-                  type="text"
-                  name="appId"
-                  value={config.appId}
-                  onChange={handleChange}
-                  placeholder="1:854930281249:web:a62b5d4e..."
-                  className="input-field"
-                />
-              </div>
-            </div>
-
-            {errorMessage && (
-              <div style={errorStyle}>
-                <ShieldAlert size={16} />
-                <span>{errorMessage}</span>
-              </div>
-            )}
-
-            <div style={footerStyle}>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <button
-                  type="button"
-                  onClick={handleLoadDemo}
-                  className="btn btn-secondary"
-                  style={{ fontSize: "0.85rem", padding: "0.5rem 1rem" }}
-                >
-                  <Sparkles size={14} style={{ color: "var(--secondary)" }} />
-                  Demo Preset
-                </button>
-                {localStorage.getItem("firebaseConfig") && (
-                  <button
-                    type="button"
-                    onClick={handleClear}
-                    className="btn btn-danger"
-                    style={{ fontSize: "0.85rem", padding: "0.5rem 1rem" }}
-                  >
-                    Reset Connection
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem" }}>
+                {hasExistingConfig && (
+                  <button type="button" onClick={handleClear} className="btn btn-danger" style={{ fontSize: "0.82rem" }}>
+                    <Trash2 size={14} />
+                    Remove Config
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={handlePasteApply}
+                  className="btn btn-primary"
+                  style={{ minWidth: 160, marginLeft: "auto" }}
+                >
+                  {isSaved ? (
+                    <><Check size={16} /> Connected!</>
+                  ) : (
+                    <><Database size={16} /> Apply & Connect</>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* MANUAL MODE */}
+          {mode === "manual" && (
+            <form onSubmit={handleManualSave} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <div style={gridStyle}>
+                {[
+                  { name: "apiKey", label: "API Key *", placeholder: "AIzaSy..." },
+                  { name: "projectId", label: "Project ID *", placeholder: "dharmagiri-ignou" },
+                  { name: "authDomain", label: "Auth Domain *", placeholder: "yourproject.firebaseapp.com" },
+                  { name: "storageBucket", label: "Storage Bucket", placeholder: "yourproject.appspot.com" },
+                  { name: "messagingSenderId", label: "Messaging Sender ID", placeholder: "854930281249" },
+                  { name: "appId", label: "App ID", placeholder: "1:854930281249:web:abc..." },
+                ].map(f => (
+                  <div key={f.name} className="form-group">
+                    <label className="form-label" style={{ fontSize: "0.75rem" }}>{f.label}</label>
+                    <input
+                      type={f.name === "apiKey" ? "password" : "text"}
+                      name={f.name}
+                      value={config[f.name] || ""}
+                      onChange={handleChange}
+                      placeholder={f.placeholder}
+                      className="input-field"
+                      required={f.label.includes("*")}
+                    />
+                  </div>
+                ))}
               </div>
 
-              <button type="submit" className="btn btn-primary" style={{ minWidth: 140 }}>
-                {isSaved ? (
-                  <>
-                    <Check size={16} />
-                    Connected!
-                  </>
-                ) : (
-                  <>
-                    <Key size={16} />
-                    Save & Load
-                  </>
+              {errorMessage && (
+                <div style={errorStyle}>
+                  <ShieldAlert size={15} />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
+              <div style={footerStyle}>
+                {hasExistingConfig && (
+                  <button type="button" onClick={handleClear} className="btn btn-danger" style={{ fontSize: "0.82rem" }}>
+                    <Trash2 size={14} />
+                    Remove Config
+                  </button>
                 )}
-              </button>
-            </div>
-          </form>
+                <button type="submit" className="btn btn-primary" style={{ minWidth: 160, marginLeft: "auto" }}>
+                  {isSaved ? (
+                    <><Check size={16} /> Connected!</>
+                  ) : (
+                    <><Database size={16} /> Save & Connect</>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
         </motion.div>
       </div>
     </AnimatePresence>
   );
 }
 
-// Styling definitions (kept inline for modularity and absolute guarantee that they don't break if global stylesheets fail)
 const overlayStyle = {
   position: "fixed",
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
+  top: 0, left: 0, right: 0, bottom: 0,
   background: "rgba(10, 33, 57, 0.45)",
   backdropFilter: "blur(8px)",
   zIndex: 1000,
@@ -252,8 +289,8 @@ const overlayStyle = {
 
 const modalStyle = {
   width: "100%",
-  maxWidth: "680px",
-  padding: "2.25rem",
+  maxWidth: "560px",
+  padding: "2rem",
   border: "1.5px solid rgba(10, 45, 84, 0.15)",
   background: "#ffffff",
   borderRadius: "var(--radius-xl)",
@@ -264,13 +301,7 @@ const headerStyle = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  marginBottom: "1.5rem",
-};
-
-const titleContainerStyle = {
-  display: "flex",
-  alignItems: "center",
-  gap: "0.75rem",
+  marginBottom: "1.25rem",
 };
 
 const closeBtnStyle = {
@@ -278,50 +309,44 @@ const closeBtnStyle = {
   border: "none",
   borderRadius: "50%",
   color: "var(--text-secondary)",
-  width: 32,
-  height: 32,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
+  width: 32, height: 32,
+  display: "flex", alignItems: "center", justifyContent: "center",
   cursor: "pointer",
-  transition: "all 0.2s",
 };
 
 const alertBoxStyle = {
   display: "flex",
-  gap: "0.75rem",
-  padding: "1rem",
-  background: "#f8fafc",
+  gap: "0.65rem",
+  padding: "0.85rem 1rem",
+  background: "#f0f7ff",
   border: "1px solid rgba(10, 45, 84, 0.12)",
   borderRadius: "var(--radius-md)",
-  marginBottom: "1.5rem",
+  marginBottom: "1.25rem",
 };
 
 const gridStyle = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-  gap: "1rem",
+  gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+  gap: "0.85rem",
 };
 
 const errorStyle = {
   display: "flex",
   alignItems: "center",
   gap: "0.5rem",
-  padding: "0.75rem 1rem",
+  padding: "0.7rem 1rem",
   background: "#fef2f2",
   border: "1px solid #fecaca",
   borderRadius: "var(--radius-md)",
   color: "#b91c1c",
-  fontSize: "0.85rem",
+  fontSize: "0.82rem",
 };
 
 const footerStyle = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  marginTop: "1.5rem",
-  paddingTop: "1.5rem",
-  borderTop: "1px solid rgba(10, 45, 84, 0.08)",
+  marginTop: "0.5rem",
   flexWrap: "wrap",
   gap: "1rem",
 };
