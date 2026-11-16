@@ -205,9 +205,11 @@ export default function StudentDashboard({ user, onLogout }) {
       {/* Header bar */}
       <header className="dashboard-header">
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <DharmagiriLogo size={42} showText={true} />
-          <div style={{ height: "30px", width: "1px", background: "rgba(255,255,255,0.08)", margin: "0 0.25rem" }}></div>
-          <span style={{ fontSize: "0.75rem", color: "var(--accent)", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>IGNOU Center</span>
+          <DharmagiriLogo size={46} showText={true} />
+          <div style={{ height: "30px", width: "1.5px", background: "rgba(10, 45, 84, 0.12)", margin: "0 0.5rem" }}></div>
+          <div className="classical-badge-gold">
+            <span>IGNOU Center 14167</span>
+          </div>
         </div>
 
         <div className="header-user-info">
@@ -234,23 +236,26 @@ export default function StudentDashboard({ user, onLogout }) {
       <main style={mainContentStyle}>
         {/* Banner */}
         <div className="glass-panel shimmer-card dashboard-banner">
-          <span style={pillBadgeStyle}>June 2026 Term End Exam</span>
-          <h2 style={{ fontSize: "1.8rem", fontWeight: 800, marginTop: "0.5rem", display: "flex", flexWrap: "wrap", rowGap: "0.1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+            <span className="classical-badge">🎓 Term End Examination — June 2026</span>
+            <span className="classical-badge-gold">Official Student Portal</span>
+          </div>
+          <h2 style={{ fontSize: "1.9rem", fontWeight: 800, marginTop: "0.75rem", display: "flex", flexWrap: "wrap", rowGap: "0.2rem", fontFamily: "var(--font-classical)" }}>
             <AnimatedText text="Find Your" type="words" delay={0.15} style={{ marginRight: "0.28em" }} />
             <span className="gradient-text" style={{ marginRight: "0.28em" }}>
               <AnimatedText text="Exam Seating Arrangement" type="words" delay={0.35} />
             </span>
             <AnimatedText text="Instantly" type="words" delay={0.65} />
           </h2>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", marginTop: "0.5rem", maxWidth: "600px" }}>
-            Enter your 9 or 10-digit IGNOU enrollment/register number below to locate your exam room, floor, block, and seating details.
+          <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", marginTop: "0.5rem", maxWidth: "620px", lineHeight: 1.6 }}>
+            Enter your 9 or 10-digit IGNOU enrollment / register number below to locate your allocated examination hall, floor, block, and desk number.
           </p>
 
           {!isValidConfig && (
             <div style={alertConfigStyle}>
               <AlertTriangle size={16} style={{ color: "var(--warning)", flexShrink: 0 }} />
-              <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                Firebase is not configured yet. Using offline demo mode. Enter <b>230104889</b>, <b>230104990</b> or <b>230104991</b> to test!
+              <p style={{ fontSize: "0.82rem", color: "#92400e", fontWeight: 500 }}>
+                Firebase is in preview mode. Enter sample enrollment number <b>230104889</b>, <b>230104990</b> or <b>230104991</b> to test the classical seating locator!
               </p>
             </div>
           )}
@@ -269,33 +274,33 @@ export default function StudentDashboard({ user, onLogout }) {
                 display: "flex",
                 alignItems: "flex-start",
                 gap: "0.85rem",
-                padding: "0.9rem 1.1rem",
+                padding: "1rem 1.25rem",
                 borderRadius: "var(--radius-md)",
-                border: `1px solid ${
-                  a.type === "warning" ? "rgba(245,158,11,0.35)"
-                  : a.type === "success" ? "rgba(16,185,129,0.35)"
-                  : "rgba(99,102,241,0.35)"
+                border: `1.5px solid ${
+                  a.type === "warning" ? "rgba(217, 119, 6, 0.3)"
+                  : a.type === "success" ? "rgba(5, 150, 105, 0.3)"
+                  : "rgba(10, 45, 84, 0.18)"
                 }`,
                 background: `${
-                  a.type === "warning" ? "rgba(245,158,11,0.07)"
-                  : a.type === "success" ? "rgba(16,185,129,0.07)"
-                  : "rgba(99,102,241,0.07)"
+                  a.type === "warning" ? "#fffbeb"
+                  : a.type === "success" ? "#ecfdf5"
+                  : "#f8fafc"
                 }`,
-                boxShadow: a.pinned ? `0 0 18px ${
-                  a.type === "warning" ? "rgba(245,158,11,0.12)"
-                  : a.type === "success" ? "rgba(16,185,129,0.12)"
-                  : "rgba(99,102,241,0.12)"
-                }` : "none",
+                boxShadow: a.pinned ? `0 4px 16px ${
+                  a.type === "warning" ? "rgba(217, 119, 6, 0.12)"
+                  : a.type === "success" ? "rgba(5, 150, 105, 0.12)"
+                  : "rgba(10, 45, 84, 0.08)"
+                }` : "var(--shadow-sm)",
               }}
             >
-              <span style={{ fontSize: "1.1rem", flexShrink: 0, marginTop: "0.05rem" }}>
+              <span style={{ fontSize: "1.15rem", flexShrink: 0, marginTop: "0.05rem" }}>
                 {a.type === "warning" ? "⚠️" : a.type === "success" ? "✅" : "📢"}
               </span>
               <div style={{ flexGrow: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.15rem" }}>
-                  <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>{a.title}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.2rem" }}>
+                  <span style={{ fontWeight: 800, fontSize: "0.92rem", color: "var(--primary)" }}>{a.title}</span>
                   {a.pinned && (
-                    <span style={{ fontSize: "0.68rem", background: "rgba(99,102,241,0.15)", color: "#a5b4fc", padding: "0.1rem 0.4rem", borderRadius: "4px", fontWeight: 600 }}>📌 Pinned</span>
+                    <span style={{ fontSize: "0.68rem", background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a", padding: "0.1rem 0.45rem", borderRadius: "4px", fontWeight: 700 }}>📌 Official Pin</span>
                   )}
                 </div>
                 <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.45 }}>{a.body}</p>
@@ -357,37 +362,55 @@ export default function StudentDashboard({ user, onLogout }) {
             >
               {/* Detailed Card */}
               <div className="seating-card shimmer-card" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-                <div>
-                  <span style={cardPillStyle}>{studentData.course.split(" ")[0]}</span>
-                  <h3 style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "0.25rem" }}>{studentData.name}</h3>
-                  <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Reg No: {studentData.registerNumber}</p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
+                      <span style={cardPillStyle}>{studentData.course.split(" ")[0]}</span>
+                      <span style={{ fontSize: "0.72rem", color: "#92400e", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                        Official Pass
+                      </span>
+                    </div>
+                    <h3 style={{ fontSize: "1.65rem", fontWeight: 800, color: "var(--primary)", fontFamily: "var(--font-classical)" }}>
+                      {studentData.name}
+                    </h3>
+                    <p style={{ color: "var(--text-secondary)", fontSize: "0.92rem", fontWeight: 600, marginTop: "0.15rem" }}>
+                      Enrollment / Reg No: <b style={{ color: "var(--primary)" }}>{studentData.registerNumber}</b>
+                    </p>
+                  </div>
+
+                  {/* Classical University Verified Seal Badge */}
+                  <div className="academic-seal">
+                    <span>DHARMAGIRI</span>
+                    <span style={{ fontSize: "0.75rem", margin: "1px 0" }}>★</span>
+                    <span>VERIFIED</span>
+                  </div>
                 </div>
 
                 <div style={dividerStyle}></div>
 
                 <div style={infoGridStyle}>
                   <div style={infoItemStyle}>
-                    <BookOpen size={18} style={{ color: "var(--primary)" }} />
+                    <BookOpen size={19} style={{ color: "var(--primary)", marginTop: "0.2rem" }} />
                     <div>
                       <span style={infoLabelStyle}>Subject / Course</span>
-                      <span style={infoValStyle}>{studentData.course}</span>
+                      <span style={{ ...infoValStyle, fontWeight: 700, color: "var(--primary)" }}>{studentData.course}</span>
                     </div>
                   </div>
 
                   <div className="seating-info-row">
                     <div style={infoItemStyle}>
-                      <Calendar size={18} style={{ color: "var(--secondary)" }} />
+                      <Calendar size={19} style={{ color: "var(--secondary)", marginTop: "0.2rem" }} />
                       <div>
                         <span style={infoLabelStyle}>Exam Date</span>
-                        <span style={infoValStyle}>{studentData.examDate}</span>
+                        <span style={{ ...infoValStyle, fontWeight: 600 }}>{studentData.examDate}</span>
                       </div>
                     </div>
 
                     <div style={infoItemStyle}>
-                      <Clock size={18} style={{ color: "var(--accent)" }} />
+                      <Clock size={19} style={{ color: "var(--accent-gold)", marginTop: "0.2rem" }} />
                       <div>
                         <span style={infoLabelStyle}>Exam Time</span>
-                        <span style={infoValStyle}>{studentData.examTime}</span>
+                        <span style={{ ...infoValStyle, fontWeight: 600 }}>{studentData.examTime}</span>
                       </div>
                     </div>
                   </div>
@@ -395,20 +418,20 @@ export default function StudentDashboard({ user, onLogout }) {
                   <div style={dividerStyle}></div>
 
                   <div style={infoItemStyle}>
-                    <MapPin size={18} style={{ color: "var(--danger)" }} />
+                    <MapPin size={19} style={{ color: "#e11d48", marginTop: "0.2rem" }} />
                     <div>
-                      <span style={infoLabelStyle}>Block / Location</span>
-                      <span style={infoValStyle} className="gradient-text-teal">{studentData.block}</span>
+                      <span style={infoLabelStyle}>Block / Building</span>
+                      <span style={{ ...infoValStyle, fontWeight: 700, color: "var(--primary)" }}>{studentData.block}</span>
                     </div>
                   </div>
 
                   <div className="seating-info-row">
                     <div style={infoItemStyle}>
-                      <Compass size={18} style={{ color: "var(--primary)" }} />
+                      <Compass size={19} style={{ color: "var(--primary)", marginTop: "0.2rem" }} />
                       <div>
                         <span style={infoLabelStyle}>Floor / Room</span>
-                        <span style={{ ...infoValStyle, fontSize: "1.1rem", fontWeight: 700 }}>
-                          {studentData.floor} - {studentData.roomNumber || "Not Allocated"}
+                        <span style={{ ...infoValStyle, fontSize: "1.15rem", fontWeight: 800, color: "var(--primary)" }}>
+                          {studentData.floor} — {studentData.roomNumber || "Not Allocated"}
                         </span>
                       </div>
                     </div>
@@ -417,8 +440,8 @@ export default function StudentDashboard({ user, onLogout }) {
                       <div style={infoItemStyle}>
                         <div style={seatIconStyle}>S</div>
                         <div>
-                          <span style={infoLabelStyle}>Seat Number</span>
-                          <span style={{ ...infoValStyle, fontSize: "1.1rem", fontWeight: 700, color: "var(--success)" }}>
+                          <span style={infoLabelStyle}>Allocated Desk / Seat</span>
+                          <span style={{ ...infoValStyle, fontSize: "1.15rem", fontWeight: 800, color: "var(--success)" }}>
                             {studentData.seatNumber}
                           </span>
                         </div>
@@ -435,21 +458,21 @@ export default function StudentDashboard({ user, onLogout }) {
               </div>
 
               {/* Visual Floor Helper Map */}
-              <div className="glass-panel shimmer-card" style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <div className="glass-panel shimmer-card" style={{ padding: "1.75rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
                 <div>
-                  <h4 style={{ fontWeight: 700, fontSize: "1.1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <Compass size={18} style={{ color: "var(--primary)" }} />
-                    Indoor Floor Guide
+                  <h4 style={{ fontWeight: 800, fontSize: "1.15rem", display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--primary)", fontFamily: "var(--font-classical)" }}>
+                    <Compass size={20} style={{ color: "var(--primary)" }} />
+                    Campus Floor Directory
                   </h4>
-                  <p style={{ color: "var(--text-secondary)", fontSize: "0.8rem", marginTop: "0.25rem" }}>
-                    Visual layout mapping out room location on the building grid.
+                  <p style={{ color: "var(--text-secondary)", fontSize: "0.82rem", marginTop: "0.25rem", lineHeight: 1.5 }}>
+                    Architectural floor layout locating your room inside the campus block.
                   </p>
                 </div>
 
                 <div className="map-visualizer" style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255, 255, 255, 0.05)", paddingBottom: "0.5rem", marginBottom: "0.5rem" }}>
-                    <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Building Layout</span>
-                    <span style={{ fontSize: "0.75rem", color: "var(--accent)", fontWeight: 600 }}>{studentData.block.split(" (")[0]}</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1.5px solid rgba(10, 45, 84, 0.08)", paddingBottom: "0.6rem", marginBottom: "0.6rem" }}>
+                    <span style={{ fontSize: "0.78rem", color: "var(--text-secondary)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Campus Building</span>
+                    <span style={{ fontSize: "0.78rem", color: "var(--primary)", fontWeight: 800 }}>{studentData.block.split(" (")[0]}</span>
                   </div>
                   
                   <div className="floor-indicator">
@@ -475,51 +498,51 @@ export default function StudentDashboard({ user, onLogout }) {
                 </div>
 
                 <div style={directionsBoxStyle}>
-                  <HelpCircle size={14} style={{ color: "var(--text-secondary)", flexShrink: 0 }} />
-                  <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.3 }}>
-                    Directions: Take the stairs or elevator near the {studentData.block.includes("Main") ? "Main Reception" : "CV Raman Lawn"} to the {studentData.floor.toLowerCase()}. Locate Room {studentData.roomNumber.replace("Room ", "")} and look for seat {studentData.seatNumber || "number list"} on the room board.
+                  <HelpCircle size={15} style={{ color: "var(--primary)", flexShrink: 0, marginTop: "0.1rem" }} />
+                  <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", lineHeight: 1.45 }}>
+                    <b>Directions:</b> Take the stairwell or elevator near the {studentData.block.includes("Main") ? "Main Reception Arches" : "Lawn Colonnade"} to the {studentData.floor.toLowerCase()}. Proceed to Room {studentData.roomNumber.replace("Room ", "")} and check desk {studentData.seatNumber || "list"} at the entrance board.
                   </p>
                 </div>
               </div>
             </motion.div>
           )}
 
-          {/* 🎉 All the Best Banner */}
+          {/* 🎉 Classical All the Best Banner */}
           {!loading && searched && studentData && (
             <motion.div
               key="all-the-best"
-              initial={{ opacity: 0, scale: 0.85, y: 20 }}
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               transition={{ type: "spring", stiffness: 120, damping: 14, delay: 0.35 }}
               style={{
                 position: "relative",
                 overflow: "hidden",
-                borderRadius: "var(--radius-lg)",
-                padding: "2rem 1.5rem",
+                borderRadius: "var(--radius-xl)",
+                padding: "2.25rem 1.75rem",
                 textAlign: "center",
-                background: "linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(20,184,166,0.12) 50%, rgba(245,158,11,0.10) 100%)",
-                border: "1px solid rgba(99,102,241,0.25)",
-                boxShadow: "0 0 40px rgba(99,102,241,0.1), 0 0 80px rgba(20,184,166,0.06)",
+                background: "linear-gradient(135deg, #ffffff 0%, #fdfbf7 50%, #f7faff 100%)",
+                border: "1.5px solid rgba(197, 155, 39, 0.35)",
+                boxShadow: "var(--shadow-elevated)",
               }}
             >
               {/* Shimmer sweep */}
               <motion.div
                 animate={{ x: ["-100%", "200%"] }}
-                transition={{ duration: 2.2, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
+                transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 3.5, ease: "easeInOut" }}
                 style={{
                   position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-                  background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 50%, transparent 100%)",
+                  background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.7) 50%, transparent 100%)",
                   pointerEvents: "none",
                 }}
               />
 
               {/* Floating emoji row */}
-              <div style={{ display: "flex", justifyContent: "center", gap: "0.6rem", marginBottom: "1rem", fontSize: "1.6rem" }}>
-                {["🌟", "📚", "✨", "🎓", "✨", "📚", "🌟"].map((emoji, i) => (
+              <div style={{ display: "flex", justifyContent: "center", gap: "0.75rem", marginBottom: "1rem", fontSize: "1.75rem" }}>
+                {["🏛️", "📖", "✨", "🎓", "✨", "📜", "🏛️"].map((emoji, i) => (
                   <motion.span
                     key={i}
-                    animate={{ y: [0, -8, 0] }}
-                    transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.18, ease: "easeInOut" }}
+                    animate={{ y: [0, -7, 0] }}
+                    transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.18, ease: "easeInOut" }}
                     style={{ display: "inline-block" }}
                   >
                     {emoji}
@@ -533,44 +556,29 @@ export default function StudentDashboard({ user, onLogout }) {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.55 }}
                 style={{
-                  fontSize: "1.85rem",
-                  fontWeight: 900,
-                  letterSpacing: "-0.02em",
-                  background: "linear-gradient(135deg, #a5b4fc 0%, #34d399 40%, #fbbf24 80%, #f472b6 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
+                  fontSize: "1.95rem",
+                  fontWeight: 800,
+                  fontFamily: "var(--font-classical)",
+                  color: "var(--primary)",
                   marginBottom: "0.5rem",
-                  lineHeight: 1.2,
+                  lineHeight: 1.25,
                 }}
               >
-                All The Best, {studentData.name.split(" ")[0]}! 🎉
+                All The Very Best, {studentData.name.split(" ")[0]}! 🎓
               </motion.h3>
 
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.7 }}
-                style={{ color: "var(--text-secondary)", fontSize: "0.95rem", lineHeight: 1.6, maxWidth: "480px", margin: "0 auto" }}
+                style={{ color: "var(--text-secondary)", fontSize: "0.98rem", lineHeight: 1.65, maxWidth: "520px", margin: "0 auto", fontWeight: 500 }}
               >
-                You've got this! Stay calm, read each question carefully, and give it your best shot. 💪
+                Approach your examination with confidence and focus. Read all instructions carefully and perform to your highest potential!
                 <br />
-                <span style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>— Dharmagiri College IGNOU Center wishes you success!</span>
+                <span style={{ color: "var(--accent-gold)", fontSize: "0.85rem", fontWeight: 700, display: "inline-block", marginTop: "0.4rem" }}>
+                  — Dharmagiri College of Arts & Science • Examination Board
+                </span>
               </motion.p>
-
-              {/* Pulse ring decoration */}
-              <motion.div
-                animate={{ scale: [1, 1.12, 1], opacity: [0.3, 0.1, 0.3] }}
-                transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
-                style={{
-                  position: "absolute", top: "50%", left: "50%",
-                  transform: "translate(-50%, -50%)",
-                  width: "200px", height: "200px",
-                  borderRadius: "50%",
-                  border: "2px solid rgba(99,102,241,0.3)",
-                  pointerEvents: "none",
-                }}
-              />
             </motion.div>
           )}
 
@@ -583,13 +591,15 @@ export default function StudentDashboard({ user, onLogout }) {
               className="glass-panel"
               style={notFoundStyle}
             >
-              <AlertTriangle size={48} style={{ color: "var(--danger)", marginBottom: "1rem" }} />
-              <h3 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "0.5rem" }}>Register Number Not Found</h3>
-              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", maxWidth: "400px", margin: "0 auto 1.5rem" }}>
-                We couldn't find seating arrangements for register number <b style={{ color: "var(--text-primary)" }}>{searchQuery}</b>. Please ensure you typed it correctly.
+              <AlertTriangle size={52} style={{ color: "var(--warning)", marginBottom: "1rem" }} />
+              <h3 style={{ fontSize: "1.35rem", fontWeight: 800, marginBottom: "0.5rem", color: "var(--primary)", fontFamily: "var(--font-classical)" }}>
+                Enrollment Number Not Found
+              </h3>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.92rem", maxWidth: "420px", margin: "0 auto 1.5rem", lineHeight: 1.55 }}>
+                We could not locate exam seating arrangements for register number <b style={{ color: "var(--primary)" }}>{searchQuery}</b>. Please check your hall ticket and try again.
               </p>
               <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
-                <button onClick={() => setSearchQuery("")} className="btn btn-secondary">Clear</button>
+                <button onClick={() => setSearchQuery("")} className="btn btn-secondary">Clear & Re-enter</button>
               </div>
             </motion.div>
           )}
@@ -598,9 +608,9 @@ export default function StudentDashboard({ user, onLogout }) {
 
       {/* Footer */}
       <footer style={footerStyle}>
-        <p>© 2026 Dharmagiri College Exam Seating Locator. All Rights Reserved.</p>
-        <p style={{ color: "var(--text-muted)", fontSize: "0.75rem", marginTop: "0.25rem" }}>
-          For IGNOU Center assistance, contact the controller of exams office inside Block A.
+        <p style={{ fontWeight: 600, color: "var(--primary)" }}>© 2026 Dharmagiri College of Arts & Science. All Rights Reserved.</p>
+        <p style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.3rem" }}>
+          Affiliated to Calicut University • Approved by AICTE • IGNOU Examination Center 14167
         </p>
       </footer>
 
@@ -610,7 +620,7 @@ export default function StudentDashboard({ user, onLogout }) {
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.8, type: "spring", stiffness: 200 }}
-        whileHover={{ scale: 1.08 }}
+        whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setShowHelpDesk(true)}
         style={{
@@ -620,26 +630,25 @@ export default function StudentDashboard({ user, onLogout }) {
           zIndex: 100,
           display: "flex",
           alignItems: "center",
-          gap: "0.5rem",
-          padding: "0.75rem 1.25rem",
-          borderRadius: "30px",
-          border: "1px solid rgba(99,102,241,0.4)",
-          background: "linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(20,184,166,0.2) 100%)",
-          backdropFilter: "blur(12px)",
-          color: "var(--text-primary)",
-          fontSize: "0.85rem",
-          fontWeight: 600,
+          gap: "0.6rem",
+          padding: "0.85rem 1.4rem",
+          borderRadius: "999px",
+          border: "1px solid rgba(197, 155, 39, 0.4)",
+          background: "linear-gradient(135deg, #0a2d54 0%, #13467e 100%)",
+          color: "#ffffff",
+          fontSize: "0.88rem",
+          fontWeight: 700,
           cursor: "pointer",
-          boxShadow: "0 8px 24px rgba(99,102,241,0.25), 0 0 0 1px rgba(99,102,241,0.1)",
+          boxShadow: "0 8px 25px rgba(10, 45, 84, 0.25), 0 2px 8px rgba(197, 155, 39, 0.25)",
         }}
       >
         <motion.span
           animate={{ rotate: [0, 15, -15, 0] }}
           transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 3 }}
         >
-          <HelpCircle size={18} style={{ color: "#a5b4fc" }} />
+          <HelpCircle size={18} style={{ color: "#f7d070" }} />
         </motion.span>
-        Help Desk
+        Exam Help Desk
       </motion.button>
 
       {/* Help Desk Contact Modal */}
@@ -652,8 +661,8 @@ export default function StudentDashboard({ user, onLogout }) {
             onClick={() => setShowHelpDesk(false)}
             style={{
               position: "fixed", inset: 0, zIndex: 200,
-              background: "rgba(0,0,0,0.6)",
-              backdropFilter: "blur(6px)",
+              background: "rgba(10, 33, 57, 0.5)",
+              backdropFilter: "blur(8px)",
               display: "flex", alignItems: "center", justifyContent: "center",
               padding: "1.5rem",
             }}
@@ -665,67 +674,58 @@ export default function StudentDashboard({ user, onLogout }) {
               transition={{ type: "spring", stiffness: 200, damping: 20 }}
               onClick={(e) => e.stopPropagation()}
               style={{
-                width: "100%", maxWidth: "360px",
-                background: "linear-gradient(145deg, rgba(15,15,25,0.98) 0%, rgba(20,20,35,0.98) 100%)",
-                border: "1px solid rgba(99,102,241,0.25)",
-                borderRadius: "var(--radius-lg)",
-                padding: "2rem",
-                boxShadow: "0 25px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,102,241,0.1)",
+                width: "100%", maxWidth: "380px",
+                background: "#ffffff",
+                border: "1.5px solid rgba(10, 45, 84, 0.15)",
+                borderRadius: "var(--radius-xl)",
+                padding: "2.25rem",
+                boxShadow: "0 25px 60px rgba(10, 33, 57, 0.25)",
                 position: "relative",
                 overflow: "hidden",
               }}
             >
-              {/* Glow decoration */}
-              <div style={{
-                position: "absolute", top: "-40px", right: "-40px",
-                width: "120px", height: "120px",
-                borderRadius: "50%",
-                background: "radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%)",
-                pointerEvents: "none",
-              }} />
-
               {/* Close button */}
               <button
                 onClick={() => setShowHelpDesk(false)}
                 style={{
                   position: "absolute", top: "1rem", right: "1rem",
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: "50%", width: "30px", height: "30px",
+                  background: "#f1f5f9",
+                  border: "none",
+                  borderRadius: "50%", width: "32px", height: "32px",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   cursor: "pointer", color: "var(--text-secondary)",
                 }}
               >
-                <X size={15} />
+                <X size={16} />
               </button>
 
               {/* Header */}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem", marginBottom: "1.75rem", textAlign: "center" }}>
                 <div style={{
-                  width: "52px", height: "52px", borderRadius: "50%",
-                  background: "linear-gradient(135deg, rgba(99,102,241,0.25) 0%, rgba(20,184,166,0.25) 100%)",
-                  border: "1px solid rgba(99,102,241,0.3)",
+                  width: "56px", height: "56px", borderRadius: "50%",
+                  background: "linear-gradient(135deg, rgba(10, 45, 84, 0.08) 0%, rgba(197, 155, 39, 0.12) 100%)",
+                  border: "1.5px solid rgba(197, 155, 39, 0.35)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
-                  <HelpCircle size={24} style={{ color: "#a5b4fc" }} />
+                  <HelpCircle size={28} style={{ color: "var(--primary)" }} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: "1.15rem", fontWeight: 800, marginBottom: "0.25rem" }}>IGNOU Help Desk</h3>
-                  <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Dharmagiri College · IGNOU Center</p>
+                  <h3 style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--primary)", fontFamily: "var(--font-classical)" }}>IGNOU Help Desk</h3>
+                  <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", fontWeight: 500 }}>Dharmagiri College of Arts & Science</p>
                 </div>
               </div>
 
               {/* Phone number display */}
               <div style={{
                 textAlign: "center",
-                padding: "0.85rem 1rem",
-                background: "rgba(99,102,241,0.07)",
-                border: "1px solid rgba(99,102,241,0.15)",
+                padding: "1rem",
+                background: "#f8fafc",
+                border: "1px solid rgba(10, 45, 84, 0.12)",
                 borderRadius: "var(--radius-md)",
                 marginBottom: "1.5rem",
               }}>
-                <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.35rem" }}>Contact Number</p>
-                <p style={{ fontSize: "1.3rem", fontWeight: 800, letterSpacing: "0.03em", color: "var(--text-primary)" }}>{HELPDESK_PHONE}</p>
+                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.35rem", fontWeight: 700 }}>Direct Help Desk Helpline</p>
+                <p style={{ fontSize: "1.35rem", fontWeight: 800, letterSpacing: "0.02em", color: "var(--primary)" }}>{HELPDESK_PHONE}</p>
               </div>
 
               {/* Action Buttons */}
@@ -733,17 +733,17 @@ export default function StudentDashboard({ user, onLogout }) {
                 {/* Call Button */}
                 <motion.a
                   href={`tel:${HELPDESK_PHONE}`}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "center", gap: "0.65rem",
-                    padding: "0.9rem 1.5rem",
+                    padding: "0.95rem 1.5rem",
                     borderRadius: "var(--radius-md)",
-                    background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
+                    background: "linear-gradient(135deg, #0a2d54 0%, #13467e 100%)",
                     color: "white",
                     fontWeight: 700, fontSize: "0.95rem",
                     textDecoration: "none",
-                    boxShadow: "0 6px 20px rgba(99,102,241,0.35)",
+                    boxShadow: "0 6px 18px rgba(10, 45, 84, 0.25)",
                     border: "none",
                   }}
                 >
@@ -756,17 +756,17 @@ export default function StudentDashboard({ user, onLogout }) {
                   href={`https://wa.me/${HELPDESK_PHONE.replace("+", "")}?text=Hello%2C%20I%20need%20help%20with%20IGNOU%20exam%20seating%20at%20Dharmagiri%20College.`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "center", gap: "0.65rem",
-                    padding: "0.9rem 1.5rem",
+                    padding: "0.95rem 1.5rem",
                     borderRadius: "var(--radius-md)",
-                    background: "linear-gradient(135deg, #16a34a 0%, #22c55e 100%)",
+                    background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
                     color: "white",
                     fontWeight: 700, fontSize: "0.95rem",
                     textDecoration: "none",
-                    boxShadow: "0 6px 20px rgba(34,197,94,0.3)",
+                    boxShadow: "0 6px 18px rgba(5, 150, 105, 0.25)",
                     border: "none",
                   }}
                 >
@@ -775,8 +775,8 @@ export default function StudentDashboard({ user, onLogout }) {
                 </motion.a>
               </div>
 
-              <p style={{ textAlign: "center", fontSize: "0.73rem", color: "var(--text-muted)", marginTop: "1.25rem" }}>
-                Available during college hours · Mon–Sat
+              <p style={{ textAlign: "center", fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "1.25rem" }}>
+                Available during exam sessions & college hours
               </p>
             </motion.div>
           </motion.div>
@@ -834,10 +834,11 @@ const avatarWrapperStyle = {
   display: "flex",
   alignItems: "center",
   gap: "0.5rem",
-  background: "rgba(255, 255, 255, 0.03)",
-  border: "1px solid var(--border-light)",
+  background: "#ffffff",
+  border: "1.5px solid rgba(10, 45, 84, 0.12)",
   padding: "0.25rem 0.75rem 0.25rem 0.25rem",
   borderRadius: "30px",
+  boxShadow: "0 2px 6px rgba(10, 45, 84, 0.04)",
 };
 
 const avatarStyle = {
@@ -850,7 +851,7 @@ const avatarPlaceholderStyle = {
   width: "28px",
   height: "28px",
   borderRadius: "50%",
-  background: "var(--primary-glow)",
+  background: "rgba(10, 45, 84, 0.08)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -883,23 +884,25 @@ const bannerStyle = {
 
 const pillBadgeStyle = {
   display: "inline-block",
-  padding: "0.25rem 0.75rem",
+  padding: "0.3rem 0.8rem",
   fontSize: "0.75rem",
-  fontWeight: 600,
+  fontWeight: 700,
   borderRadius: "30px",
-  background: "rgba(99, 102, 241, 0.15)",
-  border: "1px solid rgba(99, 102, 241, 0.3)",
-  color: "#a5b4fc",
+  background: "rgba(10, 45, 84, 0.06)",
+  border: "1px solid rgba(10, 45, 84, 0.14)",
+  color: "var(--primary)",
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
 };
 
 const alertConfigStyle = {
   display: "flex",
   alignItems: "center",
-  gap: "0.5rem",
+  gap: "0.6rem",
   marginTop: "1.25rem",
-  padding: "0.75rem 1rem",
-  background: "rgba(245, 158, 11, 0.06)",
-  border: "1px solid rgba(245, 158, 11, 0.15)",
+  padding: "0.85rem 1.15rem",
+  background: "#fef3c7",
+  border: "1px solid #fde68a",
   borderRadius: "var(--radius-md)",
 };
 
@@ -911,7 +914,9 @@ const configLinkStyle = {
 };
 
 const searchPanelStyle = {
-  padding: "1rem",
+  padding: "1.25rem",
+  background: "#ffffff",
+  border: "1.5px solid rgba(10, 45, 84, 0.12)",
 };
 
 const searchFormStyle = {
@@ -952,35 +957,36 @@ const loaderStyle = {
 };
 
 const spinnerStyle = {
-  width: "40px",
-  height: "40px",
-  border: "4px solid rgba(99, 102, 241, 0.1)",
+  width: "44px",
+  height: "44px",
+  border: "4px solid rgba(10, 45, 84, 0.1)",
   borderTop: "4px solid var(--primary)",
   borderRadius: "50%",
   animation: "spin 1s linear infinite",
 };
 
-// Add standard inline CSS block animation trick or just use Framer Motion
 const cardPillStyle = {
-  background: "rgba(255, 255, 255, 0.05)",
-  border: "1px solid var(--border-light)",
-  padding: "0.25rem 0.6rem",
+  background: "rgba(10, 45, 84, 0.06)",
+  border: "1px solid rgba(10, 45, 84, 0.12)",
+  padding: "0.25rem 0.65rem",
   fontSize: "0.75rem",
-  fontWeight: 600,
+  fontWeight: 700,
   borderRadius: "4px",
-  color: "var(--text-secondary)",
+  color: "var(--primary)",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
 };
 
 const dividerStyle = {
   height: "1px",
-  background: "rgba(255, 255, 255, 0.05)",
-  margin: "0.5rem 0",
+  background: "rgba(10, 45, 84, 0.08)",
+  margin: "0.6rem 0",
 };
 
 const infoGridStyle = {
   display: "flex",
   flexDirection: "column",
-  gap: "1rem",
+  gap: "1.1rem",
 };
 
 const infoItemStyle = {
@@ -1000,59 +1006,67 @@ const infoLabelStyle = {
   fontSize: "0.75rem",
   color: "var(--text-muted)",
   textTransform: "uppercase",
-  letterSpacing: "0.05em",
+  letterSpacing: "0.06em",
+  fontWeight: 700,
 };
 
 const infoValStyle = {
   display: "block",
-  fontSize: "0.95rem",
-  fontWeight: 500,
+  fontSize: "0.98rem",
+  fontWeight: 600,
   color: "var(--text-primary)",
 };
 
 const seatIconStyle = {
-  width: "18px",
-  height: "18px",
-  borderRadius: "4px",
-  background: "rgba(16, 185, 129, 0.15)",
+  width: "22px",
+  height: "22px",
+  borderRadius: "6px",
+  background: "#ecfdf5",
+  border: "1px solid #a7f3d0",
   color: "var(--success)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: "0.75rem",
+  fontSize: "0.78rem",
   fontWeight: 800,
+  marginTop: "0.15rem",
 };
 
 const demoTagStyle = {
   alignSelf: "flex-start",
-  padding: "0.25rem 0.5rem",
-  background: "rgba(168, 85, 247, 0.12)",
-  border: "1px solid rgba(168, 85, 247, 0.2)",
-  color: "#d8b4fe",
-  fontSize: "0.75rem",
-  fontWeight: 600,
+  padding: "0.3rem 0.65rem",
+  background: "#fef3c7",
+  border: "1px solid #fde68a",
+  color: "#92400e",
+  fontSize: "0.72rem",
+  fontWeight: 700,
   borderRadius: "4px",
   marginTop: "0.5rem",
 };
 
 const directionsBoxStyle = {
   display: "flex",
-  gap: "0.5rem",
-  padding: "0.75rem",
-  background: "rgba(255, 255, 255, 0.01)",
-  border: "1px solid var(--border-light)",
+  gap: "0.6rem",
+  padding: "0.9rem",
+  background: "#ffffff",
+  border: "1px solid rgba(10, 45, 84, 0.1)",
   borderRadius: "var(--radius-md)",
+  boxShadow: "0 1px 4px rgba(10, 45, 84, 0.02)",
 };
 
 const notFoundStyle = {
   textAlign: "center",
   padding: "4rem 2rem",
+  background: "#ffffff",
+  border: "1.5px solid rgba(10, 45, 84, 0.12)",
+  borderRadius: "var(--radius-xl)",
+  boxShadow: "var(--shadow-main)",
 };
 
 const footerStyle = {
   textAlign: "center",
   paddingTop: "2rem",
-  borderTop: "1px solid rgba(255, 255, 255, 0.05)",
-  fontSize: "0.8rem",
+  borderTop: "1px solid rgba(10, 45, 84, 0.08)",
+  fontSize: "0.82rem",
   color: "var(--text-secondary)",
 };

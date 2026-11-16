@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Database, Trash2, QrCode, ArrowLeft, Loader, Users, Layout, Compass, ShieldCheck, Download, Search, Edit, Plus, X, Bell, BellOff, Pin, Megaphone, FileDown } from "lucide-react";
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Database, Trash2, QrCode, ArrowLeft, Loader, Users, Layout, Compass, ShieldCheck, Download, Search, Edit, Plus, X, Bell, BellOff, Pin, Megaphone, FileDown, Copy, ExternalLink, HardDrive, Save } from "lucide-react";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
 import confetti from "canvas-confetti";
 import { collection, writeBatch, doc, getDocs, deleteDoc, limit, query, setDoc, addDoc, serverTimestamp, orderBy, onSnapshot } from "firebase/firestore";
-import { db, isValidConfig } from "../firebase";
+import { db, isValidConfig, ensureAdminAuth } from "../firebase";
 
 const DATABASE_FIELDS = [
   { key: "registerNumber", label: "Register / Enrollment Number", required: true },
@@ -20,27 +20,64 @@ const DATABASE_FIELDS = [
   { key: "seatNumber", label: "Seat Number (Optional)", required: false },
 ];
 
-const parseBlockAndFloor = (str) => {
-  if (!str) return { block: "Unknown Block", floor: "Ground Floor" };
-  str = String(str).trim();
-  const floorRegex = /(ground floor|1st floor|2nd floor|3rd floor|4th floor|5th floor|6th floor|7th floor|8th floor|9th floor|first floor|second floor|third floor|fourth floor|fifth floor|sixth floor|seventh floor|eighth floor|ninth floor|tenth floor|floor\s+\d+|[\d]+[a-z]{2}\s+floor)/i;
-  
-  const match = str.match(floorRegex);
-  if (match) {
-    const floorMatch = match[0];
-    let block = str.replace(floorRegex, "").replace(/[-–—,()]/g, "").trim();
-    if (!block) block = "Main Block";
-    
-    const formattedFloor = floorMatch
-      .toLowerCase()
-      .split(" ")
-      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-      
-    return { block, floor: formattedFloor };
+const parseRoomAndBlock = (headerStr, candidateRoom = "") => {
+  let block = "Main Block";
+  let floor = "Ground Floor";
+  let room = candidateRoom ? String(candidateRoom).trim() : "";
+
+  // If candidateRoom is a student register number (all digits >= 7), it is NOT a room!
+  if (/^\d{7,12}$/.test(room.replace(/\.0$/, "").trim())) {
+    room = "";
   }
-  
-  return { block: str, floor: "Ground Floor" };
+
+  const text = String(headerStr || "").trim();
+
+  // Pattern for room codes, e.g. G1, G-1, G01, F1, S1, Room 101, LH 1, Lab 2, Hall A, etc.
+  const roomPattern = /\b(room\s*\d+[a-z]?|lh\s*\d+|lab\s*\d+|hall\s*[a-z0-9]+|[gfs]\d+[a-z]?|\b\d{3}\b)\b/i;
+  const roomMatch = text.match(roomPattern);
+  if (!room && roomMatch) {
+    room = roomMatch[0].toUpperCase();
+  }
+
+  // Detect Floor
+  const floorRegex = /(ground floor|1st floor|2nd floor|3rd floor|4th floor|5th floor|first floor|second floor|third floor|fourth floor|fifth floor)/i;
+  const floorMatch = text.match(floorRegex);
+  if (floorMatch) {
+    floor = floorMatch[0].toLowerCase().split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  } else if (/^G\d+/i.test(room) || /\bground\b/i.test(text)) {
+    floor = "Ground Floor";
+  } else if (/^F\d+/i.test(room) || /\b1st\b/i.test(text) || /\bfirst\b/i.test(text)) {
+    floor = "First Floor";
+  } else if (/^S\d+/i.test(room) || /\b2nd\b/i.test(text) || /\bsecond\b/i.test(text)) {
+    floor = "Second Floor";
+  } else if (/^T\d+/i.test(room) || /\b3rd\b/i.test(text) || /\bthird\b/i.test(text)) {
+    floor = "Third Floor";
+  }
+
+  // Clean block name
+  let cleanBlock = text
+    .replace(floorRegex, "")
+    .replace(roomPattern, "")
+    .replace(/[-–—,():]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (cleanBlock.length >= 2) {
+    block = cleanBlock;
+  } else {
+    block = "New Block";
+  }
+
+  if (!room) {
+    room = "Room 1";
+  }
+
+  return { room, block, floor };
+};
+
+const parseBlockAndFloor = (str) => {
+  const res = parseRoomAndBlock(str, "");
+  return { block: res.block, floor: res.floor };
 };
 
 const parsePDFTableGrid = async (arrayBuffer) => {
@@ -86,7 +123,7 @@ const parsePDFTableGrid = async (arrayBuffer) => {
     let blockRowIdx = -1;
     for (let i = 0; i < tempRows.length; i++) {
       const rowText = tempRows[i].items.map(it => it.text.toLowerCase()).join(" ");
-      if (rowText.includes("block") || rowText.includes("floor") || rowText.includes("ground") || rowText.includes("first") || rowText.includes("5th")) {
+      if (rowText.includes("block") || rowText.includes("floor") || rowText.includes("ground") || rowText.includes("first") || rowText.includes("5th") || rowText.includes("room")) {
         blockRowIdx = i; // get the last row containing keywords
       }
     }
@@ -95,35 +132,46 @@ const parsePDFTableGrid = async (arrayBuffer) => {
     
     // The Room/Class row is directly below the Block/Floor row
     let roomRowIdx = blockRowIdx + 1;
-    if (roomRowIdx >= tempRows.length) {
+    let hasSeparateRoomRow = true;
+
+    if (roomRowIdx < tempRows.length) {
+      const candidateItems = tempRows[roomRowIdx]?.items || [];
+      // If the row immediately below the block row contains 7-12 digit student register numbers, it's NOT a room row!
+      const hasStudentNumbers = candidateItems.some(it => /^\d{7,12}$/.test(it.text.replace(/\.0$/, "").trim()));
+      if (hasStudentNumbers) {
+        hasSeparateRoomRow = false;
+        roomRowIdx = blockRowIdx; // Anchor on the block row
+      }
+    } else {
       roomRowIdx = blockRowIdx;
+      hasSeparateRoomRow = false;
     }
     
-    const roomRowItems = tempRows[roomRowIdx]?.items || [];
+    const anchorRowItems = tempRows[roomRowIdx]?.items || [];
+    if (anchorRowItems.length === 0) continue;
     
-    if (roomRowItems.length === 0) continue;
-    
-    // Map roomRowItems as column anchors (ignore very short headers like serial number column dots)
-    const columns = roomRowItems
+    // Map anchorRowItems as column anchors
+    const columns = anchorRowItems
       .filter(item => item.text.trim().length > 1)
       .map((item) => {
-        // Collect all header labels in this column from top to roomRowIdx - 1
+        // Collect all header labels in this column from top to roomRowIdx
         const colHeaderItems = [];
-        for (let r = 0; r < roomRowIdx; r++) {
+        for (let r = 0; r <= (hasSeparateRoomRow ? roomRowIdx - 1 : blockRowIdx); r++) {
           const rowItems = tempRows[r]?.items || [];
-          const closest = rowItems.find(blockItem => Math.abs(blockItem.x - item.x) < 40);
+          const closest = rowItems.find(blockItem => Math.abs(blockItem.x - item.x) < 50);
           if (closest) {
             colHeaderItems.push(closest.text);
           }
         }
         
-        const fullBlockFloor = colHeaderItems.join(" ").trim() || "NEW BLOCK Ground Floor";
+        const fullHeader = colHeaderItems.join(" ").trim() || item.text.trim();
+        const parsed = parseRoomAndBlock(fullHeader, hasSeparateRoomRow ? item.text.trim() : "");
         
         return {
-          room: item.text.trim(),
+          room: parsed.room,
           x: item.x,
           y: item.y,
-          blockFloor: fullBlockFloor,
+          blockFloor: `${parsed.block} ${parsed.floor}`,
           students: []
         };
       });
@@ -131,11 +179,10 @@ const parsePDFTableGrid = async (arrayBuffer) => {
     if (columns.length === 0) continue;
     
     // Distribute remaining items into columns based on closest X coordinate
-    for (let r = 0; r < tempRows.length; r++) {
-      if (r === blockRowIdx || r === roomRowIdx) continue;
-      // Skip the vertical header rows we already processed
-      if (r < roomRowIdx) continue;
-      
+    // If hasSeparateRoomRow is true, students start at roomRowIdx + 1. Otherwise at blockRowIdx + 1!
+    const studentStartRowIdx = hasSeparateRoomRow ? roomRowIdx + 1 : blockRowIdx + 1;
+
+    for (let r = studentStartRowIdx; r < tempRows.length; r++) {
       const rowItems = tempRows[r].items;
       rowItems.forEach((item) => {
         const text = item.text.replace(/\.0$/, "").trim();
@@ -228,6 +275,10 @@ export default function AdminDashboard({ onBack }) {
   const [formFloor, setFormFloor] = useState("");
   const [formRoomNumber, setFormRoomNumber] = useState("");
   const [formSeatNumber, setFormSeatNumber] = useState("");
+
+  // Firestore Security Rules Helper Modal state
+  const [showRulesModal, setShowRulesModal] = useState(false);
+  const [copiedRules, setCopiedRules] = useState(false);
 
   useEffect(() => {
     fetchStatsAndData();
@@ -578,7 +629,15 @@ export default function AdminDashboard({ onBack }) {
     setMapping((prev) => ({ ...prev, [dbFieldKey]: fileHeader }));
   };
 
+  const handleSaveToLocalOffline = async () => {
+    await handleUpload(true);
+  };
+
   const handleUploadToFirebase = async () => {
+    await handleUpload(false);
+  };
+
+  const handleUpload = async (forceOffline = false) => {
     if (uploadMode === "row") {
       const missingFields = DATABASE_FIELDS.filter(f => f.required && !mapping[f.key]);
       if (missingFields.length > 0) {
@@ -608,12 +667,41 @@ export default function AdminDashboard({ onBack }) {
             currentBlockFloor = String(cellBlockFloor).trim();
           }
 
-          const roomText = parsedData[1]?.[colIdx];
+          let roomText = parsedData[1]?.[colIdx];
           if (!roomText || !String(roomText).trim()) {
             continue;
           }
-          const cleanedRoom = String(roomText).trim();
-          const parsedLoc = parseBlockAndFloor(currentBlockFloor);
+
+          const rawRoomStr = String(roomText).replace(/\.0$/, "").trim();
+          // Detect if roomText is actually a student enrollment number (e.g. 2002629763)
+          const isRoomActuallyStudent = /^\d{7,12}$/.test(rawRoomStr);
+
+          let cleanedRoom = "";
+          let parsedLoc = null;
+
+          if (isRoomActuallyStudent) {
+            // Smart recovery: Extract room from block header (e.g. "G1" from "G1 New Block")
+            const recovered = parseRoomAndBlock(currentBlockFloor, "");
+            cleanedRoom = recovered.room;
+            parsedLoc = { block: recovered.block, floor: recovered.floor };
+
+            // Add the first student that was caught in the room row
+            formattedStudents.push({
+              registerNumber: rawRoomStr,
+              registerNumberLower: rawRoomStr.toLowerCase(),
+              name: "Student",
+              course: gridCourse.trim() || "IGNOU Term End Exam",
+              examDate: gridExamDate.trim() || "N/A",
+              examTime: gridExamTime.trim() || "N/A",
+              block: parsedLoc.block,
+              floor: parsedLoc.floor,
+              roomNumber: cleanedRoom,
+              seatNumber: "1",
+            });
+          } else {
+            cleanedRoom = rawRoomStr;
+            parsedLoc = parseBlockAndFloor(currentBlockFloor);
+          }
 
           for (let rowIdx = 2; rowIdx < parsedData.length; rowIdx++) {
             const regVal = parsedData[rowIdx]?.[colIdx];
@@ -630,7 +718,7 @@ export default function AdminDashboard({ onBack }) {
                   block: parsedLoc.block,
                   floor: parsedLoc.floor,
                   roomNumber: cleanedRoom,
-                  seatNumber: String(rowIdx - 1),
+                  seatNumber: String(isRoomActuallyStudent ? rowIdx : rowIdx - 1),
                 });
               }
             }
@@ -654,21 +742,23 @@ export default function AdminDashboard({ onBack }) {
         return;
       }
 
-      if (!isValidConfig || !db) {
-        setUploadStatus("Saving to offline database...");
-        await new Promise(resolve => setTimeout(resolve, 800));
-
+      const saveLocally = () => {
         const localStudentsStr = localStorage.getItem("demo_students");
         let items = localStudentsStr ? JSON.parse(localStudentsStr) : [];
-        
         const newRegNumbers = new Set(formattedStudents.map(s => s.registerNumberLower));
         items = items.filter(s => !newRegNumbers.has(s.registerNumberLower));
-        
         items = [...items, ...formattedStudents];
         localStorage.setItem("demo_students", JSON.stringify(items));
+      };
+
+      if (forceOffline || !isValidConfig || !db) {
+        setUploadStatus("Saving to offline database...");
+        await new Promise(resolve => setTimeout(resolve, 600));
+
+        saveLocally();
 
         setUploadProgress(100);
-        setUploadStatus("Successfully saved to offline memory!");
+        setUploadStatus(`✅ Successfully saved ${formattedStudents.length} records to local offline memory!`);
         confetti({
           particleCount: 150,
           spread: 80,
@@ -679,40 +769,109 @@ export default function AdminDashboard({ onBack }) {
         setParsedData([]);
         fetchStatsAndData();
       } else {
-        const batchSize = 200;
-        const totalDocs = formattedStudents.length;
-        let uploadedCount = 0;
-
-        for (let i = 0; i < totalDocs; i += batchSize) {
-          const batch = writeBatch(db);
-          const chunk = formattedStudents.slice(i, i + batchSize);
-
-          chunk.forEach((student) => {
-            const docRef = doc(collection(db, "students"), student.registerNumberLower);
-            batch.set(docRef, student);
-          });
-
-          setUploadStatus(`Uploading records ${i + 1} to ${Math.min(i + batchSize, totalDocs)} of ${totalDocs}...`);
-          await batch.commit();
-          
-          uploadedCount += chunk.length;
-          setUploadProgress(Math.round((uploadedCount / totalDocs) * 100));
+        // Authenticate admin session in Firebase to satisfy Firestore security rules
+        try {
+          await ensureAdminAuth();
+        } catch (authErr) {
+          console.warn("Background Firebase Auth skipped:", authErr);
         }
 
-        setUploadStatus("Successfully updated Firestore!");
-        confetti({
-          particleCount: 150,
-          spread: 80,
-          origin: { y: 0.6 }
-        });
+        try {
+          const batchSize = 200;
+          const totalDocs = formattedStudents.length;
+          let uploadedCount = 0;
 
-        setFile(null);
-        setParsedData([]);
-        fetchStatsAndData();
+          for (let i = 0; i < totalDocs; i += batchSize) {
+            const batch = writeBatch(db);
+            const chunk = formattedStudents.slice(i, i + batchSize);
+
+            chunk.forEach((student) => {
+              const docRef = doc(collection(db, "students"), student.registerNumberLower);
+              batch.set(docRef, student);
+            });
+
+            setUploadStatus(`Uploading records ${i + 1} to ${Math.min(i + batchSize, totalDocs)} of ${totalDocs}...`);
+            await batch.commit();
+            
+            uploadedCount += chunk.length;
+            setUploadProgress(Math.round((uploadedCount / totalDocs) * 100));
+          }
+
+          // Also save a copy locally so data is never lost
+          saveLocally();
+
+          setUploadStatus(`✅ Successfully saved ${totalDocs} records to Firestore!`);
+          confetti({
+            particleCount: 150,
+            spread: 80,
+            origin: { y: 0.6 }
+          });
+
+          setFile(null);
+          setParsedData([]);
+          fetchStatsAndData();
+        } catch (firestoreError) {
+          console.error("Firestore commit failed:", firestoreError);
+          const isPermission = firestoreError.message?.toLowerCase().includes("permission") || firestoreError.code === "permission-denied";
+          
+          // Automatic offline fallback: save locally so admin's work is NEVER lost!
+          saveLocally();
+          setUploadProgress(100);
+          setFile(null);
+          setParsedData([]);
+          fetchStatsAndData();
+          confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+
+          if (isPermission) {
+            setUploadStatus(`⚠️ Saved ${formattedStudents.length} records locally! (Firestore write was blocked by Firebase security rules)`);
+            setShowRulesModal(true); // Pop up the rule helper with one-click copy!
+          } else {
+            setUploadStatus(`⚠️ Saved ${formattedStudents.length} records locally: ${firestoreError.message}`);
+          }
+        }
       }
     } catch (error) {
       console.error("Upload Error:", error);
       setUploadStatus(`Upload failed: ${error.message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSyncLocalToFirestore = async () => {
+    const localStudentsStr = localStorage.getItem("demo_students");
+    const items = localStudentsStr ? JSON.parse(localStudentsStr) : [];
+    if (items.length === 0) {
+      alert("No local records found to sync.");
+      return;
+    }
+    if (!isValidConfig || !db) {
+      alert("Firebase is not configured yet.");
+      return;
+    }
+
+    setUploading(true);
+    setUploadStatus("Syncing local records to Firestore...");
+    try {
+      await ensureAdminAuth();
+      const batchSize = 200;
+      for (let i = 0; i < items.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const chunk = items.slice(i, i + batchSize);
+        chunk.forEach((student) => {
+          const docRef = doc(collection(db, "students"), student.registerNumberLower);
+          batch.set(docRef, student);
+        });
+        await batch.commit();
+      }
+
+      setUploadStatus(`✅ Successfully synced ${items.length} records to Firestore!`);
+      confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+      setShowRulesModal(false);
+      fetchStatsAndData();
+    } catch (e) {
+      alert("Sync failed: " + e.message + "\n\nPlease ensure your Firestore security rules are published in the Firebase Console.");
+      setUploadStatus("Sync failed: " + e.message);
     } finally {
       setUploading(false);
     }
@@ -958,6 +1117,18 @@ export default function AdminDashboard({ onBack }) {
             </p>
           </div>
         </div>
+
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+          <button
+            onClick={() => setShowRulesModal(true)}
+            className="btn btn-secondary"
+            style={{ fontSize: "0.78rem", padding: "0.45rem 0.85rem", gap: "0.4rem" }}
+            title="Configure Firestore Security Rules"
+          >
+            <ShieldCheck size={14} style={{ color: "var(--accent)" }} />
+            <span>Firestore Rules Helper</span>
+          </button>
+        </div>
       </header>
 
       {/* Analytics widgets */}
@@ -1031,7 +1202,7 @@ export default function AdminDashboard({ onBack }) {
           </button>
 
           {/* Mode Tabs */}
-          <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", borderBottom: "1px solid rgba(255, 255, 255, 0.05)", paddingBottom: "0.75rem" }}>
+          <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", borderBottom: "1px solid rgba(10, 45, 84, 0.08)", paddingBottom: "0.75rem" }}>
             <button
               onClick={() => { setUploadMode("row"); setFile(null); setParsedData([]); }}
               className={`btn ${uploadMode === "row" ? "btn-primary" : "btn-secondary"}`}
@@ -1161,7 +1332,7 @@ export default function AdminDashboard({ onBack }) {
               {/* Column Mapping Section for Row Mode */}
               {uploadMode === "row" && (
                 <div style={mappingBoxStyle}>
-                  <h3 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "1rem", color: "var(--text-primary)", borderBottom: "1px solid rgba(255, 255, 255, 0.05)", paddingBottom: "0.5rem" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "1rem", color: "var(--text-primary)", borderBottom: "1px solid rgba(10, 45, 84, 0.08)", paddingBottom: "0.5rem" }}>
                     Map Spreadsheet Columns
                   </h3>
                   
@@ -1191,11 +1362,17 @@ export default function AdminDashboard({ onBack }) {
               )}
 
               {/* Grid Mode Preview Section */}
+              {/* Grid Mode Preview Section */}
               {uploadMode === "grid" && parsedData && parsedData.length > 0 && (
                 <div style={{ marginTop: "1.5rem" }}>
-                  <h3 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "1rem", color: "var(--text-primary)", borderBottom: "1px solid rgba(255, 255, 255, 0.05)", paddingBottom: "0.5rem" }}>
-                    Grid Layout Preview ({parsedData[0]?.length || 0} Rooms Detected)
-                  </h3>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", borderBottom: "1px solid rgba(10, 45, 84, 0.08)", paddingBottom: "0.5rem" }}>
+                    <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0, color: "var(--text-primary)" }}>
+                      Grid Layout Preview ({parsedData[0]?.length || 0} Rooms Detected)
+                    </h3>
+                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                      Editable: verify or edit detected Room / Block below
+                    </span>
+                  </div>
                   <div style={{
                     display: "flex",
                     gap: "1rem",
@@ -1204,8 +1381,12 @@ export default function AdminDashboard({ onBack }) {
                     scrollbarWidth: "thin"
                   }}>
                     {Array.from({ length: parsedData[0]?.length || 0 }).map((_, colIdx) => {
-                      const blockFloor = parsedData[0]?.[colIdx] || "(Same as left)";
-                      const room = parsedData[1]?.[colIdx] || "Unknown Room";
+                      const blockFloor = parsedData[0]?.[colIdx] || "";
+                      const room = parsedData[1]?.[colIdx] || "";
+                      const rawRoomStr = String(room).replace(/\.0$/, "").trim();
+                      const isSuspicious = /^\d{7,12}$/.test(rawRoomStr);
+                      const recovered = parseRoomAndBlock(blockFloor, "");
+                      const displayRoom = isSuspicious ? (recovered.room || "G1") : (room || "Room");
                       
                       // Count register numbers in this column
                       let count = 0;
@@ -1214,46 +1395,113 @@ export default function AdminDashboard({ onBack }) {
                           count++;
                         }
                       }
+                      if (isSuspicious) count += 1; // includes the student number extracted from row 1
                       
                       return (
                         <div key={colIdx} style={{
-                          minWidth: "180px",
-                          background: "rgba(255,255,255,0.02)",
-                          border: "1px solid var(--border-light)",
+                          minWidth: "200px",
+                          background: "#ffffff",
+                          border: isSuspicious ? "1.5px solid var(--accent)" : "1.5px solid rgba(10, 45, 84, 0.12)",
                           borderRadius: "var(--radius-md)",
                           padding: "1rem",
                           display: "flex",
                           flexDirection: "column",
-                          gap: "0.5rem"
+                          gap: "0.6rem",
+                          boxShadow: "0 2px 6px rgba(10, 45, 84, 0.03)"
                         }}>
-                          <div style={{ fontSize: "0.7rem", color: "var(--text-secondary)", fontWeight: 500 }}>
-                            {blockFloor}
+                          <div>
+                            <label style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, display: "block", marginBottom: "0.2rem" }}>
+                              Block / Floor
+                            </label>
+                            <input
+                              type="text"
+                              value={blockFloor}
+                              placeholder="e.g. G1 New Block"
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setParsedData(prev => {
+                                  const next = prev.map(r => [...r]);
+                                  if (!next[0]) next[0] = [];
+                                  next[0][colIdx] = val;
+                                  return next;
+                                });
+                              }}
+                              style={{
+                                width: "100%",
+                                fontSize: "0.75rem",
+                                fontWeight: 600,
+                                color: "var(--text-secondary)",
+                                border: "1px solid rgba(10, 45, 84, 0.15)",
+                                borderRadius: "4px",
+                                padding: "0.25rem 0.45rem",
+                                background: "#f8fafc"
+                              }}
+                            />
                           </div>
-                          <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--primary)" }}>
-                            {room}
+
+                          <div>
+                            <label style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, display: "block", marginBottom: "0.2rem" }}>
+                              Room Code
+                            </label>
+                            <input
+                              type="text"
+                              value={room}
+                              placeholder="e.g. G1"
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setParsedData(prev => {
+                                  const next = prev.map(r => [...r]);
+                                  if (!next[1]) next[1] = [];
+                                  next[1][colIdx] = val;
+                                  return next;
+                                });
+                              }}
+                              style={{
+                                width: "100%",
+                                fontSize: "0.95rem",
+                                fontWeight: 800,
+                                color: "var(--primary)",
+                                border: isSuspicious ? "1.5px solid var(--accent)" : "1px solid rgba(10, 45, 84, 0.15)",
+                                borderRadius: "4px",
+                                padding: "0.25rem 0.45rem",
+                                background: isSuspicious ? "rgba(197, 155, 39, 0.08)" : "#ffffff"
+                              }}
+                            />
+                            {isSuspicious && (
+                              <div style={{ fontSize: "0.68rem", color: "#b45309", marginTop: "0.25rem", fontWeight: 600 }}>
+                                ⚡ Student ID auto-mapped to room: <strong>{displayRoom}</strong>
+                              </div>
+                            )}
                           </div>
-                          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>
+
+                          <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: 500 }}>
                             {count} Students Seated
                           </div>
+                          
                           <div style={{
-                            maxHeight: "120px",
+                            maxHeight: "110px",
                             overflowY: "auto",
-                            background: "rgba(0,0,0,0.2)",
+                            background: "#f8fafc",
                             padding: "0.5rem",
-                            borderRadius: "4px",
+                            borderRadius: "6px",
                             fontSize: "0.75rem",
                             fontFamily: "monospace",
-                            border: "1px solid rgba(255,255,255,0.05)"
+                            border: "1px solid rgba(10, 45, 84, 0.1)"
                           }}>
-                            {Array.from({ length: Math.min(5, parsedData.length - 2) }).map((_, i) => {
+                            {isSuspicious && (
+                              <div style={{ padding: "1px 0", color: "var(--primary)", fontWeight: 600 }}>
+                                {rawRoomStr}
+                              </div>
+                            )}
+                            {Array.from({ length: Math.min(4, parsedData.length - 2) }).map((_, i) => {
                               const reg = parsedData[i + 2]?.[colIdx];
                               return reg && String(reg).trim() ? (
                                 <div key={i} style={{ padding: "1px 0" }}>{String(reg).trim()}</div>
                               ) : null;
                             })}
-                            {parsedData.length - 2 > 5 && (
+                            {parsedData.length - 2 > 4 && (
                               <div style={{ color: "var(--text-muted)", fontStyle: "italic", fontSize: "0.7rem", marginTop: "2px" }}>
-                                + {parsedData.length - 2 - 5} more...
+                                + {parsedData.length - 2 - 4} more...
                               </div>
                             )}
                           </div>
@@ -1265,8 +1513,20 @@ export default function AdminDashboard({ onBack }) {
               )}
 
               {/* Upload actions */}
-              <div style={{ display: "flex", gap: "1rem", marginTop: "1.5rem", justifyContent: "flex-end" }}>
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
                 <button
+                  type="button"
+                  onClick={handleSaveToLocalOffline}
+                  className="btn btn-secondary"
+                  disabled={uploading}
+                  style={{ minWidth: "160px" }}
+                  title="Saves instantly to local browser memory. Search works immediately on this device."
+                >
+                  <Save size={16} style={{ color: "var(--accent)" }} />
+                  Save to Local Storage
+                </button>
+                <button
+                  type="button"
                   onClick={handleUploadToFirebase}
                   className="btn btn-primary"
                   disabled={uploading}
@@ -1302,13 +1562,37 @@ export default function AdminDashboard({ onBack }) {
           )}
 
           {uploadStatus && !uploading && (
-            <div style={{ ...statusFeedbackStyle, borderColor: uploadStatus.includes("failed") ? "var(--danger)" : "var(--success)" }}>
-              {uploadStatus.includes("failed") ? (
-                <AlertCircle size={16} style={{ color: "var(--danger)" }} />
-              ) : (
-                <CheckCircle size={16} style={{ color: "var(--success)" }} />
+            <div style={{
+              ...statusFeedbackStyle,
+              borderColor: uploadStatus.includes("failed") ? "var(--danger)" : uploadStatus.includes("⚠️") ? "#d97706" : "var(--success)",
+              background: uploadStatus.includes("failed") ? "#fff5f5" : uploadStatus.includes("⚠️") ? "#fffbf0" : "#f0fdf4",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "0.75rem"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                {uploadStatus.includes("failed") ? (
+                  <AlertCircle size={18} style={{ color: "var(--danger)", flexShrink: 0 }} />
+                ) : uploadStatus.includes("⚠️") ? (
+                  <AlertCircle size={18} style={{ color: "#d97706", flexShrink: 0 }} />
+                ) : (
+                  <CheckCircle size={18} style={{ color: "var(--success)", flexShrink: 0 }} />
+                )}
+                <span style={{ fontSize: "0.85rem", color: "var(--text-primary)", fontWeight: 500 }}>{uploadStatus}</span>
+              </div>
+              {(uploadStatus.toLowerCase().includes("permission") || uploadStatus.toLowerCase().includes("rule") || uploadStatus.includes("⚠️")) && (
+                <button
+                  type="button"
+                  onClick={() => setShowRulesModal(true)}
+                  className="btn btn-secondary"
+                  style={{ fontSize: "0.78rem", padding: "0.35rem 0.75rem", gap: "0.35rem", whiteSpace: "nowrap" }}
+                >
+                  <ShieldCheck size={14} style={{ color: "var(--accent)" }} />
+                  Configure Rules
+                </button>
               )}
-              <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>{uploadStatus}</span>
             </div>
           )}
         </section>
@@ -1331,7 +1615,7 @@ export default function AdminDashboard({ onBack }) {
                 value={window.location.origin}
                 size={180}
                 bgColor={"#ffffff"}
-                fgColor={"#080a10"}
+                fgColor={"#0a2d54"}
                 level={"H"}
                 includeMargin={true}
               />
@@ -1344,7 +1628,7 @@ export default function AdminDashboard({ onBack }) {
                 value={window.location.origin}
                 size={512}
                 bgColor={"#ffffff"}
-                fgColor={"#080a10"}
+                fgColor={"#0a2d54"}
                 level={"H"}
                 includeMargin={true}
               />
@@ -1437,7 +1721,7 @@ export default function AdminDashboard({ onBack }) {
                         <button
                           onClick={() => openEditModal(s)}
                           className="btn btn-secondary"
-                          style={{ padding: "0.35rem", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.08)" }}
+                          style={{ padding: "0.35rem", borderRadius: "8px", border: "1px solid rgba(10, 45, 84, 0.15)" }}
                           title="Edit Student Seating"
                         >
                           <Edit size={14} style={{ color: "var(--accent)" }} />
@@ -1445,10 +1729,10 @@ export default function AdminDashboard({ onBack }) {
                         <button
                           onClick={() => handleDeleteStudent(s)}
                           className="btn btn-danger"
-                          style={{ padding: "0.35rem", borderRadius: "8px", background: "rgba(239, 68, 68, 0.05)", border: "1px solid rgba(239, 68, 68, 0.15)" }}
+                          style={{ padding: "0.35rem", borderRadius: "8px" }}
                           title="Delete Student Seating"
                         >
-                          <Trash2 size={14} style={{ color: "#fca5a5" }} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
@@ -1458,10 +1742,10 @@ export default function AdminDashboard({ onBack }) {
             </table>
           </div>
         ) : (
-          <div style={{ textAlign: "center", padding: "4rem 2rem", border: "1px dashed rgba(255, 255, 255, 0.05)", borderRadius: "var(--radius-lg)" }}>
-            <Database size={36} style={{ color: "var(--text-muted)", marginBottom: "1rem" }} />
-            <p style={{ fontWeight: 600, fontSize: "0.95rem" }}>No database records found</p>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginTop: "0.25rem" }}>Upload a CSV or Excel sheet above to populate the seating database.</p>
+          <div style={{ textAlign: "center", padding: "4rem 2rem", border: "1.5px dashed rgba(10, 45, 84, 0.15)", borderRadius: "var(--radius-lg)", background: "#f8fafc" }}>
+            <Database size={36} style={{ color: "var(--primary)", marginBottom: "1rem" }} />
+            <p style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--primary)" }}>No database records found</p>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.82rem", marginTop: "0.25rem" }}>Upload a CSV or Excel sheet above to populate the seating database.</p>
           </div>
         )}
       </section>
@@ -1673,10 +1957,10 @@ export default function AdminDashboard({ onBack }) {
             <Loader size={28} className="spin" style={{ color: "var(--primary)", margin: "0 auto" }} />
           </div>
         ) : announcements.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "3rem 2rem", border: "1px dashed rgba(255,255,255,0.06)", borderRadius: "var(--radius-lg)" }}>
-            <Bell size={32} style={{ color: "var(--text-muted)", marginBottom: "0.75rem" }} />
-            <p style={{ fontWeight: 600, fontSize: "0.95rem" }}>No announcements yet</p>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginTop: "0.25rem" }}>Click "Post Announcement" to create one that students will see immediately.</p>
+          <div style={{ textAlign: "center", padding: "3rem 2rem", border: "1.5px dashed rgba(10, 45, 84, 0.15)", borderRadius: "var(--radius-lg)", background: "#f8fafc" }}>
+            <Bell size={32} style={{ color: "var(--primary)", marginBottom: "0.75rem" }} />
+            <p style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--primary)" }}>No announcements yet</p>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.82rem", marginTop: "0.25rem" }}>Click "Post Announcement" to create one that students will see immediately.</p>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
@@ -1691,16 +1975,17 @@ export default function AdminDashboard({ onBack }) {
                   gap: "1rem",
                   padding: "1rem 1.25rem",
                   borderRadius: "var(--radius-md)",
-                  border: `1px solid ${
-                    a.type === "warning" ? "rgba(245,158,11,0.2)"
-                    : a.type === "success" ? "rgba(16,185,129,0.2)"
-                    : "rgba(99,102,241,0.2)"
+                  border: `1.5px solid ${
+                    a.type === "warning" ? "rgba(217, 119, 6, 0.3)"
+                    : a.type === "success" ? "rgba(5, 150, 105, 0.3)"
+                    : "rgba(10, 45, 84, 0.15)"
                   }`,
                   background: `${
-                    a.type === "warning" ? "rgba(245,158,11,0.05)"
-                    : a.type === "success" ? "rgba(16,185,129,0.05)"
-                    : "rgba(99,102,241,0.05)"
+                    a.type === "warning" ? "#fffbeb"
+                    : a.type === "success" ? "#ecfdf5"
+                    : "#f8fafc"
                   }`,
+                  boxShadow: "var(--shadow-sm)",
                 }}
               >
                 <div style={{ fontSize: "1.2rem", flexShrink: 0, marginTop: "0.1rem" }}>
@@ -1708,9 +1993,9 @@ export default function AdminDashboard({ onBack }) {
                 </div>
                 <div style={{ flexGrow: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
-                    <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>{a.title}</span>
+                    <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--primary)" }}>{a.title}</span>
                     {a.pinned && (
-                      <span style={{ fontSize: "0.7rem", background: "rgba(99,102,241,0.15)", color: "#a5b4fc", padding: "0.1rem 0.4rem", borderRadius: "4px", fontWeight: 600 }}>📌 Pinned</span>
+                      <span style={{ fontSize: "0.7rem", background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a", padding: "0.1rem 0.45rem", borderRadius: "4px", fontWeight: 700 }}>📌 Pinned</span>
                     )}
                   </div>
                   <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>{a.body}</p>
@@ -1846,6 +2131,143 @@ export default function AdminDashboard({ onBack }) {
         )}
       </AnimatePresence>
 
+      {/* ── Firestore Security Rules Helper Modal ────────────────────── */}
+      <AnimatePresence>
+        {showRulesModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="responsive-modal-overlay"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="glass-panel responsive-modal-content"
+              style={{ maxWidth: "620px" }}
+            >
+              <div style={modalHeaderStyle}>
+                <h2 style={{ fontSize: "1.2rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--primary)" }}>
+                  <ShieldCheck size={22} style={{ color: "var(--accent)" }} />
+                  Firestore Security Rules Setup
+                </h2>
+                <button
+                  onClick={() => setShowRulesModal(false)}
+                  className="btn btn-secondary"
+                  style={modalCloseBtnStyle}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ background: "rgba(197, 155, 39, 0.08)", border: "1px solid rgba(197, 155, 39, 0.25)", borderRadius: "var(--radius-md)", padding: "0.85rem 1rem", fontSize: "0.85rem", color: "var(--text-primary)" }}>
+                  <p style={{ margin: 0, fontWeight: 600 }}>Why did "Missing or insufficient permissions" occur?</p>
+                  <p style={{ margin: "0.35rem 0 0 0", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                    Firebase Cloud Firestore starts in <strong>Production Mode</strong> by default, which blocks all reads and writes until security rules are configured.
+                  </p>
+                </div>
+
+                <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                  <p style={{ margin: "0 0 0.5rem 0", fontWeight: 600, color: "var(--primary)" }}>3 Easy Steps to Fix:</p>
+                  <ol style={{ margin: 0, paddingLeft: "1.25rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                    <li>Open your Firebase Console and go to <strong>Firestore Database &gt; Rules</strong> tab.</li>
+                    <li>Replace existing contents with the rule snippet below.</li>
+                    <li>Click <strong>Publish</strong>.</li>
+                  </ol>
+                </div>
+
+                <div style={{ position: "relative" }}>
+                  <pre style={{
+                    background: "#0a192f",
+                    color: "#e2e8f0",
+                    padding: "1rem",
+                    borderRadius: "8px",
+                    fontSize: "0.8rem",
+                    fontFamily: "monospace",
+                    overflowX: "auto",
+                    margin: 0
+                  }}>
+{`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}`}
+                  </pre>
+                  <button
+                    onClick={() => {
+                      const rules = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}`;
+                      navigator.clipboard.writeText(rules);
+                      setCopiedRules(true);
+                      setTimeout(() => setCopiedRules(false), 2500);
+                    }}
+                    className="btn btn-accent"
+                    style={{
+                      position: "absolute",
+                      top: "0.5rem",
+                      right: "0.5rem",
+                      fontSize: "0.75rem",
+                      padding: "0.3rem 0.65rem",
+                      gap: "0.3rem"
+                    }}
+                  >
+                    <Copy size={13} />
+                    {copiedRules ? "Copied!" : "Copy Rules"}
+                  </button>
+                </div>
+
+                {/* Local Sync helper */}
+                <div style={{ background: "#f8fafc", border: "1px solid rgba(10, 45, 84, 0.1)", borderRadius: "var(--radius-md)", padding: "1rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
+                    <HardDrive size={16} style={{ color: "var(--primary)" }} />
+                    <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--primary)" }}>Sync Local Records to Firestore</span>
+                  </div>
+                  <p style={{ margin: "0 0 0.75rem 0", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                    Any records uploaded while permissions were blocked were automatically backed up to local storage so nothing is lost. Click below after publishing your rules to push them to the cloud.
+                  </p>
+                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+                    <button
+                      onClick={handleSyncLocalToFirestore}
+                      disabled={uploading}
+                      className="btn btn-primary"
+                      style={{ fontSize: "0.82rem", padding: "0.45rem 1rem" }}
+                    >
+                      {uploading ? <Loader size={14} className="spin" /> : <Database size={14} />}
+                      Sync Local Records Now
+                    </button>
+                    <a
+                      href="https://console.firebase.google.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-secondary"
+                      style={{ fontSize: "0.82rem", padding: "0.45rem 1rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
+                    >
+                      <ExternalLink size={14} />
+                      Open Firebase Console
+                    </a>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "0.5rem" }}>
+                  <button
+                    onClick={() => setShowRulesModal(false)}
+                    className="btn btn-secondary"
+                    style={{ minWidth: "90px" }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Embedded CSS class styling tricks for uploader */}
       <style dangerouslySetInnerHTML={{__html: `
         .spin {
@@ -1876,7 +2298,7 @@ const headerStyle = {
   justifyContent: "space-between",
   alignItems: "center",
   paddingBottom: "1rem",
-  borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+  borderBottom: "1px solid rgba(10, 45, 84, 0.08)",
 };
 
 const backBtnStyle = {
@@ -1900,6 +2322,9 @@ const statCardStyle = {
   display: "flex",
   alignItems: "center",
   gap: "1.25rem",
+  background: "#ffffff",
+  border: "1.5px solid rgba(10, 45, 84, 0.1)",
+  boxShadow: "0 4px 15px rgba(10, 45, 84, 0.04)",
 };
 
 const statLabelStyle = {
@@ -1907,14 +2332,15 @@ const statLabelStyle = {
   fontSize: "0.8rem",
   color: "var(--text-secondary)",
   textTransform: "uppercase",
-  letterSpacing: "0.05em",
+  letterSpacing: "0.06em",
+  fontWeight: 700,
 };
 
 const statValueStyle = {
   display: "block",
-  fontSize: "1.6rem",
+  fontSize: "1.65rem",
   fontWeight: 800,
-  color: "var(--text-primary)",
+  color: "var(--primary)",
   lineHeight: 1.2,
 };
 
@@ -1925,8 +2351,8 @@ const mainGridStyle = {
 };
 
 const fileDetailsContainerStyle = {
-  background: "rgba(255, 255, 255, 0.01)",
-  border: "1px solid var(--border-light)",
+  background: "#f8fafc",
+  border: "1.5px solid rgba(10, 45, 84, 0.1)",
   borderRadius: "var(--radius-lg)",
   padding: "1.5rem",
 };
@@ -1936,7 +2362,7 @@ const fileRowStyle = {
   alignItems: "center",
   gap: "1rem",
   paddingBottom: "1.25rem",
-  borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+  borderBottom: "1px solid rgba(10, 45, 84, 0.08)",
 };
 
 const mappingBoxStyle = {
@@ -1960,8 +2386,8 @@ const selectStyle = {
   fontFamily: "var(--font-primary)",
   fontSize: "0.85rem",
   padding: "0.6rem 0.8rem",
-  background: "rgba(15, 23, 42, 0.6)",
-  border: "1px solid var(--border-light)",
+  background: "#ffffff",
+  border: "1.5px solid rgba(10, 45, 84, 0.15)",
   borderRadius: "var(--radius-sm)",
   color: "var(--text-primary)",
   outline: "none",
@@ -1971,14 +2397,14 @@ const selectStyle = {
 const progressBoxStyle = {
   marginTop: "1.5rem",
   padding: "1rem",
-  background: "rgba(99, 102, 241, 0.05)",
-  border: "1px solid rgba(99, 102, 241, 0.1)",
+  background: "rgba(10, 45, 84, 0.04)",
+  border: "1px solid rgba(10, 45, 84, 0.1)",
   borderRadius: "var(--radius-md)",
 };
 
 const progressBarBgStyle = {
   height: "6px",
-  background: "rgba(255, 255, 255, 0.05)",
+  background: "rgba(10, 45, 84, 0.08)",
   borderRadius: "3px",
   overflow: "hidden",
 };
@@ -1995,8 +2421,8 @@ const statusFeedbackStyle = {
   gap: "0.5rem",
   marginTop: "1.5rem",
   padding: "0.75rem 1rem",
-  background: "rgba(255, 255, 255, 0.02)",
-  border: "1px solid",
+  background: "#ffffff",
+  border: "1px solid rgba(10, 45, 84, 0.12)",
   borderRadius: "var(--radius-md)",
 };
 
@@ -2010,10 +2436,11 @@ const qrWrapperStyle = {
 };
 
 const qrContainerStyle = {
-  padding: "1rem",
+  padding: "1.25rem",
   background: "white",
   borderRadius: "var(--radius-md)",
-  boxShadow: "0 10px 30px rgba(0, 0, 0, 0.3)",
+  boxShadow: "0 10px 30px rgba(10, 45, 84, 0.1)",
+  border: "1.5px solid rgba(10, 45, 84, 0.1)",
 };
 
 const dbSearchContainerStyle = {
@@ -2033,9 +2460,9 @@ const dbSearchInputStyle = {
   width: "100%",
   fontFamily: "var(--font-primary)",
   fontSize: "0.85rem",
-  padding: "0.5rem 0.8rem 0.5rem 2.2rem",
-  background: "rgba(15, 23, 42, 0.4)",
-  border: "1px solid var(--border-light)",
+  padding: "0.55rem 0.8rem 0.55rem 2.2rem",
+  background: "#ffffff",
+  border: "1.5px solid rgba(10, 45, 84, 0.15)",
   borderRadius: "var(--radius-sm)",
   color: "var(--text-primary)",
   outline: "none",
@@ -2048,8 +2475,8 @@ const modalOverlayStyle = {
   left: 0,
   right: 0,
   bottom: 0,
-  background: "rgba(3, 8, 12, 0.85)",
-  backdropFilter: "blur(12px)",
+  background: "rgba(10, 33, 57, 0.45)",
+  backdropFilter: "blur(8px)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -2061,10 +2488,10 @@ const modalContentStyle = {
   width: "100%",
   maxWidth: "680px",
   padding: "2.5rem",
-  background: "linear-gradient(135deg, rgba(8, 22, 33, 0.95) 0%, rgba(3, 10, 15, 0.99) 100%)",
-  border: "1px solid var(--border-glow)",
-  borderRadius: "var(--radius-lg)",
-  boxShadow: "0 25px 60px rgba(0, 0, 0, 0.85)"
+  background: "#ffffff",
+  border: "1.5px solid rgba(10, 45, 84, 0.15)",
+  borderRadius: "var(--radius-xl)",
+  boxShadow: "0 25px 60px rgba(10, 33, 57, 0.25)"
 };
 
 const modalHeaderStyle = {
@@ -2072,7 +2499,7 @@ const modalHeaderStyle = {
   justifyContent: "space-between",
   alignItems: "center",
   marginBottom: "1.5rem",
-  borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+  borderBottom: "1px solid rgba(10, 45, 84, 0.08)",
   paddingBottom: "0.75rem"
 };
 
@@ -2084,7 +2511,11 @@ const modalCloseBtnStyle = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  minWidth: "auto"
+  minWidth: "auto",
+  background: "#f1f5f9",
+  border: "none",
+  color: "var(--text-secondary)",
+  cursor: "pointer",
 };
 
 const modalFormStyle = {
@@ -2110,6 +2541,6 @@ const modalFooterStyle = {
   justifyContent: "flex-end",
   gap: "1rem",
   marginTop: "1.5rem",
-  borderTop: "1px solid rgba(255, 255, 255, 0.05)",
+  borderTop: "1px solid rgba(10, 45, 84, 0.08)",
   paddingTop: "1.25rem"
 };

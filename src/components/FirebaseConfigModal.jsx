@@ -241,7 +241,7 @@ const overlayStyle = {
   left: 0,
   right: 0,
   bottom: 0,
-  background: "rgba(3, 7, 18, 0.8)",
+  background: "rgba(10, 33, 57, 0.45)",
   backdropFilter: "blur(8px)",
   zIndex: 1000,
   display: "flex",
@@ -253,9 +253,11 @@ const overlayStyle = {
 const modalStyle = {
   width: "100%",
   maxWidth: "680px",
-  padding: "2rem",
-  border: "1px solid rgba(255, 255, 255, 0.1)",
-  background: "rgba(10, 15, 30, 0.85)",
+  padding: "2.25rem",
+  border: "1.5px solid rgba(10, 45, 84, 0.15)",
+  background: "#ffffff",
+  borderRadius: "var(--radius-xl)",
+  boxShadow: "0 25px 60px rgba(10, 33, 57, 0.25)",
 };
 
 const headerStyle = {
@@ -272,7 +274,7 @@ const titleContainerStyle = {
 };
 
 const closeBtnStyle = {
-  background: "rgba(255, 255, 255, 0.05)",
+  background: "#f1f5f9",
   border: "none",
   borderRadius: "50%",
   color: "var(--text-secondary)",
@@ -289,8 +291,8 @@ const alertBoxStyle = {
   display: "flex",
   gap: "0.75rem",
   padding: "1rem",
-  background: "rgba(99, 102, 241, 0.06)",
-  border: "1px solid rgba(99, 102, 241, 0.15)",
+  background: "#f8fafc",
+  border: "1px solid rgba(10, 45, 84, 0.12)",
   borderRadius: "var(--radius-md)",
   marginBottom: "1.5rem",
 };
@@ -306,10 +308,10 @@ const errorStyle = {
   alignItems: "center",
   gap: "0.5rem",
   padding: "0.75rem 1rem",
-  background: "rgba(239, 68, 68, 0.1)",
-  border: "1px solid rgba(239, 68, 68, 0.2)",
+  background: "#fef2f2",
+  border: "1px solid #fecaca",
   borderRadius: "var(--radius-md)",
-  color: "#fca5a5",
+  color: "#b91c1c",
   fontSize: "0.85rem",
 };
 
@@ -319,7 +321,7 @@ const footerStyle = {
   alignItems: "center",
   marginTop: "1.5rem",
   paddingTop: "1.5rem",
-  borderTop: "1px solid rgba(255, 255, 255, 0.05)",
+  borderTop: "1px solid rgba(10, 45, 84, 0.08)",
   flexWrap: "wrap",
   gap: "1rem",
 };

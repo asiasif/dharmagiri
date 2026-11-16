@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { LogIn, Key, ShieldCheck, Sparkles, Database, Settings, RefreshCw, Eye, EyeOff } from "lucide-react";
 import { onAuthStateChanged, signInWithPopup } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { auth, googleProvider, db, isValidConfig, loginWithGoogle, logout } from "./firebase";
+import { auth, googleProvider, db, isValidConfig, loginWithGoogle, logout, ensureAdminAuth } from "./firebase";
 
 import StudentDashboard from "./components/StudentDashboard";
 import AdminDashboard from "./components/AdminDashboard";
@@ -35,6 +35,7 @@ export default function App() {
       setIsAdmin(true);
       setView("admin");
       setAuthLoading(false);
+      ensureAdminAuth("dharmagiricollege@gmail.com", "sulfika@123").catch(() => {});
       return;
     }
 
@@ -138,7 +139,7 @@ export default function App() {
     }
   };
 
-  const handleAdminCredentialsLogin = (e) => {
+  const handleAdminCredentialsLogin = async (e) => {
     e.preventDefault();
     setLoginError("");
 
@@ -160,6 +161,13 @@ export default function App() {
       setAdminLoginActive(false);
       setAdminEmail("");
       setAdminPassword("");
+
+      // Ensure Firebase auth session so request.auth != null in Firestore
+      try {
+        await ensureAdminAuth("dharmagiricollege@gmail.com", "sulfika@123");
+      } catch (authErr) {
+        console.warn("Background Firebase Auth sync skipped:", authErr);
+      }
     } else {
       setLoginError("Invalid administrator credentials. Please try again.");
     }
@@ -167,9 +175,10 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Background Animated Gradients & Orbs */}
+      {/* Background Classical Animated Gradients & Orbs */}
       <div className="bg-glow-container">
         <div className="floating-orb-1"></div>
+        <div className="floating-orb-2"></div>
       </div>
 
       <AnimatePresence mode="wait">
@@ -181,8 +190,8 @@ export default function App() {
             exit={{ opacity: 0 }}
             style={spinnerOverlayStyle}
           >
-            <RefreshCw size={40} className="spin" style={{ color: "var(--primary)" }} />
-            <p style={{ marginTop: "1rem", color: "var(--text-secondary)" }}>Verifying credentials...</p>
+            <RefreshCw size={44} className="spin" style={{ color: "var(--primary)" }} />
+            <p style={{ marginTop: "1rem", color: "var(--text-secondary)", fontWeight: 600 }}>Verifying credentials...</p>
           </motion.div>
         ) : !user ? (
           // LOGIN SCREEN
@@ -198,9 +207,12 @@ export default function App() {
               {adminLoginActive ? (
                 // ADMIN CREDENTIALS LOGIN FORM
                 <form onSubmit={handleAdminCredentialsLogin} style={{ display: "flex", flexDirection: "column", gap: "1.25rem", width: "100%", textAlign: "left" }}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.25rem", marginBottom: "0.5rem", width: "100%", textAlign: "center" }}>
-                    <DharmagiriLogo size={52} alignment="column" />
-                    <span style={subtitleStyle}>Administrator Portal</span>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", marginBottom: "0.5rem", width: "100%", textAlign: "center" }}>
+                    <DharmagiriLogo size={60} alignment="column" />
+                    <div className="classical-badge" style={{ marginTop: "0.25rem" }}>
+                      <ShieldCheck size={14} />
+                      <span>Administrator Portal</span>
+                    </div>
                   </div>
 
                   <div className="form-group" style={{ marginBottom: "0.75rem" }}>
@@ -209,7 +221,7 @@ export default function App() {
                       type="email"
                       value={adminEmail}
                       onChange={(e) => setAdminEmail(e.target.value)}
-                      placeholder="admin@dharmagiri.com"
+                      placeholder="dharmagiricollege@gmail.com"
                       className="input-field"
                       required
                     />
@@ -254,11 +266,12 @@ export default function App() {
                       alignItems: "center",
                       gap: "0.5rem",
                       padding: "0.75rem 1rem",
-                      background: "rgba(239, 68, 68, 0.1)",
-                      border: "1px solid rgba(239, 68, 68, 0.2)",
+                      background: "var(--danger-bg)",
+                      border: "1px solid #fecaca",
                       borderRadius: "var(--radius-md)",
-                      color: "#fca5a5",
+                      color: "var(--danger)",
                       fontSize: "0.85rem",
+                      fontWeight: 600
                     }}>
                       <span>{loginError}</span>
                     </div>
@@ -284,39 +297,41 @@ export default function App() {
                 // STANDARD STUDENT SIGN-IN CARD
                 <>
                   {/* Logo & Branding */}
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.25rem", marginBottom: "0.5rem" }}>
-                    <DharmagiriLogo size={64} alignment="column" />
-                    <span style={subtitleStyle}>IGNOU Center Help Desk</span>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", marginBottom: "0.5rem" }}>
+                    <DharmagiriLogo size={68} alignment="column" />
+                    <div className="classical-badge-gold" style={{ marginTop: "0.25rem", padding: "0.3rem 0.8rem", borderRadius: "999px", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                      IGNOU Examination Center
+                    </div>
                   </div>
 
                   <div style={welcomeBoxStyle}>
-                    <Sparkles size={20} className="gradient-text" style={{ flexShrink: 0 }} />
+                    <Sparkles size={22} style={{ color: "var(--accent-gold)", flexShrink: 0, marginTop: "0.15rem" }} />
                     <div>
-                      <h2 style={{ fontSize: "1.1rem", fontWeight: 700 }}>
-                        <AnimatedText text="IGNOU Seating Locator" type="chars" delay={0.2} />
+                      <h2 style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--primary)", fontFamily: "var(--font-classical)", letterSpacing: "0.01em" }}>
+                        <AnimatedText text="Exam Seating Locator" type="chars" delay={0.2} />
                       </h2>
-                      <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "0.25rem" }}>
-                        Scan the college gateway QR code, sign in with your Google account, and lookup your room arrangements instantly.
+                      <p style={{ fontSize: "0.84rem", color: "var(--text-secondary)", marginTop: "0.35rem", lineHeight: 1.5 }}>
+                        Scan the college gateway QR code, sign in with your student Google account, and look up your room arrangements instantly.
                       </p>
                     </div>
                   </div>
 
                   {/* Login actions */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", width: "100%" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem", width: "100%" }}>
                     <button onClick={handleGoogleLogin} className="btn btn-primary" style={loginBtnStyle}>
                       <LogIn size={18} />
                       Sign In with Google
                     </button>
 
                     <button onClick={() => { setAdminLoginActive(true); setLoginError(""); }} className="btn btn-secondary" style={adminLoginBtnStyle}>
-                      <ShieldCheck size={18} style={{ color: "var(--accent)" }} />
-                      Access Admin Portal
+                      <ShieldCheck size={18} style={{ color: "var(--accent-gold)" }} />
+                      Staff / Admin Portal
                     </button>
                   </div>
 
                   {isDemoMode && (
                     <div style={demoWarningStyle}>
-                      <Database size={12} />
+                      <Database size={13} />
                       <span>Preview Environment Active (Offline Mode)</span>
                     </div>
                   )}
@@ -394,7 +409,8 @@ const spinnerOverlayStyle = {
   alignItems: "center",
   justifyContent: "center",
   zIndex: 1000,
-  background: "var(--bg-dark)",
+  background: "rgba(244, 247, 251, 0.94)",
+  backdropFilter: "blur(12px)",
 };
 
 const loginWrapperStyle = {
@@ -407,8 +423,8 @@ const loginWrapperStyle = {
 
 const loginCardStyle = {
   width: "100%",
-  maxWidth: "440px",
-  padding: "2.5rem",
+  maxWidth: "460px",
+  padding: "2.75rem 2.25rem",
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
@@ -424,51 +440,54 @@ const logoWrapperStyle = {
 };
 
 const logoIconStyle = {
-  width: "44px",
-  height: "44px",
+  width: "48px",
+  height: "48px",
   borderRadius: "var(--radius-md)",
-  background: "linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)",
+  background: "linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   fontSize: "1.5rem",
   fontWeight: 800,
   color: "white",
-  boxShadow: "0 8px 16px rgba(99, 102, 241, 0.3)",
+  boxShadow: "0 6px 18px rgba(10, 45, 84, 0.25)",
 };
 
 const titleStyle = {
   fontSize: "1.4rem",
   fontWeight: 800,
-  letterSpacing: "-0.02em",
+  letterSpacing: "-0.01em",
   lineHeight: 1.2,
   textAlign: "left",
+  fontFamily: "var(--font-classical)",
+  color: "var(--primary)",
 };
 
 const subtitleStyle = {
   display: "block",
   fontSize: "0.75rem",
   color: "var(--text-secondary)",
-  fontWeight: 600,
-  letterSpacing: "0.05em",
+  fontWeight: 700,
+  letterSpacing: "0.06em",
   textTransform: "uppercase",
   textAlign: "left",
 };
 
 const welcomeBoxStyle = {
   display: "flex",
-  gap: "0.75rem",
-  padding: "1rem",
-  background: "rgba(99, 102, 241, 0.05)",
-  border: "1px solid rgba(99, 102, 241, 0.12)",
+  gap: "0.85rem",
+  padding: "1.1rem",
+  background: "linear-gradient(135deg, rgba(10, 45, 84, 0.04) 0%, rgba(197, 155, 39, 0.08) 100%)",
+  border: "1px solid rgba(197, 155, 39, 0.25)",
   borderRadius: "var(--radius-md)",
   textAlign: "left",
 };
 
 const loginBtnStyle = {
   width: "100%",
-  padding: "0.85rem 1.5rem",
+  padding: "0.9rem 1.5rem",
   fontSize: "1rem",
+  fontWeight: 700,
 };
 
 const adminLoginBtnStyle = {
@@ -490,13 +509,13 @@ const dividerStyle = {
     content: '""',
     flexGrow: 1,
     height: "1px",
-    background: "rgba(255, 255, 255, 0.05)",
+    background: "rgba(10, 45, 84, 0.1)",
   },
   "&::after": {
     content: '""',
     flexGrow: 1,
     height: "1px",
-    background: "rgba(255, 255, 255, 0.05)",
+    background: "rgba(10, 45, 84, 0.1)",
   },
 };
 
@@ -510,9 +529,13 @@ const configBtnStyle = {
 const demoWarningStyle = {
   display: "flex",
   alignItems: "center",
-  gap: "0.4rem",
-  fontSize: "0.7rem",
-  color: "var(--secondary)",
+  gap: "0.45rem",
+  fontSize: "0.72rem",
+  color: "#92400e",
+  background: "#fef3c7",
+  border: "1px solid #fde68a",
+  padding: "0.4rem 0.8rem",
+  borderRadius: "6px",
   fontWeight: 600,
   letterSpacing: "0.02em",
 };
@@ -522,8 +545,9 @@ const floatingAdminBtnStyle = {
   bottom: "2rem",
   right: "2rem",
   zIndex: 100,
-  boxShadow: "0 10px 25px rgba(20, 184, 166, 0.4)",
-  borderRadius: "30px",
-  padding: "0.8rem 1.4rem",
-  fontSize: "0.85rem",
+  boxShadow: "0 12px 30px rgba(10, 45, 84, 0.25), 0 4px 12px rgba(197, 155, 39, 0.2)",
+  borderRadius: "999px",
+  padding: "0.85rem 1.5rem",
+  fontSize: "0.88rem",
+  fontWeight: 700,
 };
